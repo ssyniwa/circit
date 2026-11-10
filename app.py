@@ -1,143 +1,214 @@
+import glob
 import json
+import os
 import streamlit as st
 
 st.set_page_config(
-    page_title="エーテルサーキット：魔導機甲グランプリ",
-    page_icon="🏎️",
+    page_title="エーテルサーキット：魔導機甲カスタムファクトリー",
+    page_icon="🛠️",
     layout="wide",
 )
 
-# カスタカスタムパーツのデータベース
+# 1. パーツデータベースの拡張（4つのスロット）
 CHASSIS_OPTIONS = {
     "重装甲魔導アーマー": {
-        "name": "重装甲魔導アーマー",
         "speed": 60,
         "accel": 50,
         "handling": 80,
         "desc": "圧倒的な防御力と安定したコーナーリングを誇る重機甲。",
+        "img": "heavy_armor.png",
     },
     "超高速ホバリングバイク": {
-        "name": "超高速ホバリングバイク",
         "speed": 95,
         "accel": 85,
         "handling": 40,
         "desc": "直線の爆発的な加速と最高速に特化した反重力ビークル。",
+        "img": "hover_bike.png",
     },
     "全地形万能バギー": {
-        "name": "全地形万能バギー",
         "speed": 75,
         "accel": 70,
         "handling": 75,
         "desc": "あらゆる路面状況に対応するバランス型フレーム。",
+        "img": "all_terrain_buggy.png",
+    },
+    "ステルス・ウィング": {
+        "speed": 90,
+        "accel": 65,
+        "handling": 60,
+        "desc": "空力特性を極限まで高めた超軽量滑空フレーム。",
+        "img": "stealth_wing.png",
     },
 }
 
 CORE_OPTIONS = {
     "古龍の魔結晶": {
-        "name": "古龍の魔結晶",
         "power": 90,
         "boost": 70,
         "desc": "莫大な魔力を供給するが、熱暴走のリスクがある。",
+        "img": "dragon_core.png",
     },
     "プラズマ核融合炉": {
-        "name": "プラズマ核融合炉",
         "power": 80,
         "boost": 90,
         "desc": "安定した高出力を発揮し、瞬間ブースト性能に優れる。",
+        "img": "plasma_core.png",
     },
     "エーテルタービン": {
-        "name": "エーテルタービン",
         "power": 70,
         "boost": 80,
         "desc": "環境エネルギーを効率よく変換するエコ＆高レスポンス炉。",
+        "img": "ether_turbine.png",
+    },
+    "ゼロ・ポイント機関": {
+        "power": 100,
+        "boost": 100,
+        "desc": "次元の真空から無限のエネルギーを引き出すオーパーツ機関。",
+        "img": "zero_point_core.png",
     },
 }
 
-BOOSTER_OPTIONS = {
-    "イオン噴射スラスター": {
-        "name": "イオン噴射スラスター",
-        "bonus_speed": 15,
-        "bonus_accel": 20,
+ARMOR_OPTIONS = {
+    "標準耐熱コーティング": {
+        "defense": 20,
+        "weight": -5,
+        "img": "armor_standard.png",
     },
-    "次元跳躍アクセラレーター": {
-        "name": "次元跳躍アクセラレーター",
-        "bonus_speed": 25,
-        "bonus_accel": 10,
+    "魔力収束シールド発生器": {
+        "defense": 45,
+        "weight": -15,
+        "img": "armor_shield.png",
     },
-    "安定スタビライザー": {
-        "name": "安定スタビライザー",
-        "bonus_speed": 5,
+    "重チタン・ハードプレート": {
+        "defense": 70,
+        "weight": 20,
+        "img": "armor_titanium.png",
+    },
+}
+
+WEAPON_OPTIONS = {
+    "エーテル・バルカン砲": {
+        "attack": 60,
+        "bonus_accel": 5,
+        "img": "weapon_vulcan.png",
+    },
+    "プラズマ・キャノン": {
+        "attack": 90,
+        "bonus_accel": -5,
+        "img": "weapon_cannon.png",
+    },
+    "近接ブレードポッド": {
+        "attack": 75,
         "bonus_accel": 15,
+        "img": "weapon_blade.png",
+    },
+    "武装なし（軽量化）": {
+        "attack": 0,
+        "bonus_accel": 25,
+        "img": "weapon_none.png",
     },
 }
 
-st.title("🏎️ エーテルサーキット：魔導機甲グランプリ")
+st.title("🛠️ 魔導機甲・カスタムファクトリー ＆ サーキット")
 st.markdown(
-    "異世界の素材やSFテクノロジーを組み合わせてオリジナルの機体をビルドし、ネオン輝くサーキットでの走行シミュレーションに挑もう！"
+    "豊富なパーツを自由に組み合わせて自分だけの機体を構築し、imageディレクトリ内のビジュアルを確認しながらサーキット出走テストを行おう！"
 )
 
-# 1. カスタマイズセクション
-st.subheader("🛠️ マシンカスタマイズ工房")
+# 2. カスタマイズUI（4カラム）
+st.subheader("🔧 マシンパーツ・アッセンブル")
 
-col1, col2, col3 = st.columns(3)
-
+col1, col2 = st.columns(2)
 with col1:
-    st.markdown("### ① フレーム・ボディ")
-    selected_chassis_key = st.selectbox(
-        "ボディ選択", list(CHASSIS_OPTIONS.keys()), label_visibility="collapsed"
+    selected_chassis = st.selectbox(
+        "① フレーム・ボディ", list(CHASSIS_OPTIONS.keys())
     )
-    chassis = CHASSIS_OPTIONS[selected_chassis_key]
-    st.info(f"**{chassis['name']}**\n\n{chassis['desc']}")
-
+    selected_core = st.selectbox("② 動力機関（コア）", list(CORE_OPTIONS.keys()))
 with col2:
-    st.markdown("### ② 動力機関（コア）")
-    selected_core_key = st.selectbox(
-        "コア選択", list(CORE_OPTIONS.keys()), label_visibility="collapsed"
-    )
-    core = CORE_OPTIONS[selected_core_key]
-    st.success(f"**{core['name']}**\n\n{core['desc']}")
+    selected_armor = st.selectbox("③ 装甲・防御システム", list(ARMOR_OPTIONS.keys()))
+    selected_weapon = st.selectbox("④ 主武装・アタッチメント", list(WEAPON_OPTIONS.keys()))
 
-with col3:
-    st.markdown("### ③ 補助ブースター")
-    selected_booster_key = st.selectbox(
-        "ブースター選択", list(BOOSTER_OPTIONS.keys()), label_visibility="collapsed"
-    )
-    booster = BOOSTER_OPTIONS[selected_booster_key]
-    st.warning(f"**{booster['name']}**")
+chassis_data = CHASSIS_OPTIONS[selected_chassis]
+core_data = CORE_OPTIONS[selected_core]
+armor_data = ARMOR_OPTIONS[selected_armor]
+weapon_data = WEAPON_OPTIONS[selected_weapon]
 
-# パラメータ合算計算
-total_speed = chassis["speed"] + core["power"] + booster["bonus_speed"]
-total_accel = chassis["accel"] + core["boost"] + booster["bonus_accel"]
-total_handling = chassis["handling"]
+# 3. スペック合算計算
+total_speed = (
+    chassis_data["speed"]
+    + core_data["power"] // 2
+    - max(0, armor_data["weight"])
+)
+total_accel = (
+    chassis_data["accel"]
+    + core_data["boost"] // 2
+    + weapon_data["bonus_accel"]
+)
+total_handling = chassis_data["handling"]
+total_defense = armor_data["defense"]
+total_attack = weapon_data["attack"]
 
 st.markdown("---")
 
-# 2. ステータス表示
-st.subheader("📊 マシン性能スペックス")
-sc1, sc2, sc3 = st.columns(3)
-sc1.metric("最高速度 (MAX SPEED)", f"{total_speed} km/h")
-sc2.metric("加速レスポンス (ACCEL)", f"{total_accel} pts")
-sc3.metric("操舵安定性 (HANDLING)", f"{total_handling} pts")
+# 4. ビジュアル表示セクション（imageディレクトリ連携）
+st.subheader("🖼️ マシン・ビジュアル確認")
 
-# JavaScriptに渡すデータをJSON形式で準備
+# imageディレクトリ内の画像ファイルを検索するヘルパー関数
+def find_image_path(preferred_filename):
+    target_path = os.path.join("image", preferred_filename)
+    if os.path.exists(target_path):
+        return target_path
+    
+    # 見つからない場合のフォールバック（imageディレクトリ内の適当な画像を探す）
+    image_files = glob.glob("image/*.png") + glob.glob("image/*.jpg")
+    if image_files:
+        return image_files[0]
+    return None
+
+# ボディまたはパーツに紐づく画像パスを取得
+image_file_name = chassis_data["img"]
+resolved_image_path = find_image_path(image_file_name)
+
+vcol1, vcol2 = st.columns([1, 2])
+with vcol1:
+    if resolved_image_path and os.path.exists(resolved_image_path):
+        st.image(
+            resolved_image_path,
+            caption=f"機体コンセプト: {selected_chassis}",
+            use_container_width=True,
+        )
+    else:
+        st.warning(
+            f"⚠️ 'image/{image_file_name}' が見つかりませんでした。\n\n`image` ディレクトリに該当画像ファイルを配置してください。"
+        )
+
+with vcol2:
+    st.markdown("### 📊 総合スペック評価")
+    sc1, sc2, sc3 = st.columns(3)
+    sc1.metric("最高速度 (SPEED)", f"{total_speed} km/h")
+    sc2.metric("加速力 (ACCEL)", f"{total_accel} pts")
+    sc3.metric("操舵性 (HANDLING)", f"{total_handling} pts")
+
+    sc4, sc5 = st.columns(2)
+    sc4.metric("防御力 (DEFENSE)", f"{total_defense} pts")
+    sc5.metric("攻撃力 (ATTACK)", f"{total_attack} pts")
+
+    st.info(
+        f"**構成サマリー**: {selected_chassis} ＋ {selected_core} ＋ {selected_armor} ＋ {selected_weapon}"
+    )
+
 machine_config = {
-    "name": f"{selected_chassis_key} + {selected_core_key}",
+    "name": f"{selected_chassis}",
     "speed": total_speed,
     "accel": total_accel,
     "handling": total_handling,
 }
-
 config_json = json.dumps(machine_config)
 
 st.markdown("---")
 
-# 3. サーキット走行シミュレーション（HTML5 Canvas + JavaScript埋め込み）
+# 5. サーキット走行シミュレーション
 st.subheader("🏁 リアルタイム・サーキットシミュレーション")
-st.markdown(
-    "「レーススタート」を押すと、あなたのマシンがコースに出走します。アクセルやブーストボタンでコントロールを体験しよう！"
-)
 
-# HTML/JS コンポーネントの構築
 simulation_html = f"""
 <!DOCTYPE html>
 <html>
@@ -216,7 +287,6 @@ simulation_html = f"""
   let distance = 0;
   let throttle = false;
 
-  // サーキットの形状定義（オーバルコースの中心座標と半径）
   const trackCenterX = 350;
   const trackCenterY = 200;
   const trackRadiusX = 250;
@@ -242,11 +312,10 @@ simulation_html = f"""
         currentSpeed += accelRate;
         if (currentSpeed > maxSpd) currentSpeed = maxSpd;
       }} else {{
-        currentSpeed -= 1.5; // 自然減速
+        currentSpeed -= 1.5;
         if (currentSpeed < 0) currentSpeed = 0;
       }}
 
-      // 距離と時間の更新
       distance += currentSpeed * 0.002;
       elapsedTime = ((performance.now() - startTime) / 1000).toFixed(2);
       document.getElementById('m-time').innerText = elapsedTime + 's';
@@ -255,17 +324,14 @@ simulation_html = f"""
   }}
 
   function draw() {{
-    // 背景クリア
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. サーキットコースの描画
     ctx.beginPath();
     ctx.ellipse(trackCenterX, trackCenterY, trackRadiusX, trackRadiusY, 0, 0, Math.PI * 2);
     ctx.strokeStyle = '#30363d';
     ctx.lineWidth = 60;
     ctx.stroke();
 
-    // コース内側の白線
     ctx.beginPath();
     ctx.ellipse(trackCenterX, trackCenterY, trackRadiusX - 30, trackRadiusY - 30, 0, 0, Math.PI * 2);
     ctx.strokeStyle = '#21262d';
@@ -278,7 +344,6 @@ simulation_html = f"""
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // スタート・ゴールライン
     ctx.strokeStyle = '#f0f6fc';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -286,23 +351,19 @@ simulation_html = f"""
     ctx.lineTo(trackCenterX, trackCenterY - trackRadiusY + 30);
     ctx.stroke();
 
-    // 2. マシンの位置計算（楕円軌道上を移動）
     const angle = (distance * 0.5) % (Math.PI * 2);
     const carX = trackCenterX + Math.cos(angle - Math.PI / 2) * trackRadiusX;
     const carY = trackCenterY + Math.sin(angle - Math.PI / 2) * trackRadiusY;
 
-    // マシン本体の描画
     ctx.save();
     ctx.translate(carX, carY);
-    ctx.rotate(angle); // 進行方向に向ける
+    ctx.rotate(angle);
 
-    // マシンのボディ
     ctx.fillStyle = '#58a6ff';
     ctx.fillRect(-12, -6, 24, 12);
-    // コックピット
     ctx.fillStyle = '#7ee787';
     ctx.fillRect(-4, -4, 8, 8);
-    // スラスター炎 (アクセル中)
+    
     if (throttle && isRunning) {{
       ctx.fillStyle = '#f85149';
       ctx.beginPath();
@@ -327,7 +388,6 @@ simulation_html = f"""
 </html>
 """
 
-# Streamlit上にHTML/JSコンポーネントを描画
 st.components.v1.html(simulation_html, height=480)
 
-<FollowUp label="このアプリに「画像生成AI連携機能」を追加して、作成した機体のビジュアルをAIに描かせるコードを組み込みたいですか？" query="魔導機甲のカスタム設定からプロンプトを自動生成し、画像生成AIでビジュアルを出力する機能を追加する方法を教えて。" />
+<FollowUp label="パーツの組み合わせに応じたカスタム画像をGeminiの画像生成APIやファイル名規則で動的に切り替える仕組みを追加したいですか？" query="パーツの組み合わせ名（例：フレーム＋コア＋武装）の文字列からファイル名を動的に生成し、imageディレクトリ内の対応画像を完璧に一致させて表示する仕組みを教えて。" />
