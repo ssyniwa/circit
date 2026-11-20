@@ -1,3 +1,4 @@
+import base64
 import glob
 import json
 import os
@@ -186,6 +187,16 @@ def resolve_machine_image(chassis_id, core_id, armor_id, weapon_id):
     return None, "画像なし"
 
 
+def image_to_data_uri(img_path):
+    if not img_path or not os.path.exists(img_path):
+        return None
+    ext = os.path.splitext(img_path)[1].lower()
+    mime = "image/png" if ext == ".png" else ("image/jpeg" if ext in [".jpg", ".jpeg"] else "image/webp")
+    with open(img_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    return f"data:{mime};base64,{b64}"
+
+
 def create_default_unit(nation_name, idx):
     core_name = NATIONS[nation_name]["core"]
     m = calc_machine_stats(
@@ -223,7 +234,6 @@ def init_world(player_nation=None):
     industry_lv = {n: 1 for n in NATIONS}
     hangar = {n: [create_default_unit(n, i) for i in range(3)] for n in NATIONS}
 
-    # 4部隊（部隊1〜4）を初期化
     corps = {}
     for n_name, info in NATIONS.items():
         hr, hc = info["home"]
@@ -246,7 +256,6 @@ def init_world(player_nation=None):
     st.session_state.hangar = hangar
     st.session_state.corps = corps
     st.session_state.battle_data = None
-    st.session_state.turn_reports = []
     st.session_state.logs = [
         "=== ワールドマップを生成しました（全64領地） ==="
     ]
@@ -298,7 +307,6 @@ def render_map_html(highlight_pos=None):
             t_icon = terrain_icons[terrain]
             t_label = terrain_short[terrain]
 
-            # 部隊マーカー収集
             corp_badges = []
             if p_nat:
                 for idx, cp in enumerate(st.session_state.corps[p_nat]):
@@ -346,11 +354,9 @@ def run_ai_economy_and_production():
             continue
         inc = get_income(nat)
         st.session_state.funds[nat] += inc
-        # 余裕があれば産業強化
         if st.session_state.funds[nat] >= 250 and st.session_state.industry_lv[nat] < 8:
             st.session_state.funds[nat] -= 150
             st.session_state.industry_lv[nat] += 1
-        # 機体自動生産
         core_name = NATIONS[nat]["core"]
         chassis_choice = random.choice(list(CHASSIS_OPTIONS.keys()))
         armor_choice = random.choice(list(ARMOR_OPTIONS.keys()))
@@ -362,7 +368,6 @@ def run_ai_economy_and_production():
             unit["name"] = f"{chassis_choice[:4]}機"
             unit["slot"] = random.choice(FORMATION_SLOTS)
             st.session_state.hangar[nat].append(unit)
-            # 部隊へ補充
             target_corp = random.choice(st.session_state.corps[nat])
             if len(target_corp["units"]) < 3:
                 target_corp["units"].append(unit)
@@ -381,7 +386,6 @@ def run_ai_movement_and_invasion():
                 else:
                     continue
             r, c = cp["pos"]
-            # 自領が奪われていたら本拠地へ
             if st.session_state.owner_grid[r][c] != nat:
                 cp["pos"] = info["home"]
                 r, c = cp["pos"]
@@ -421,7 +425,6 @@ def run_ai_movement_and_invasion():
                 cp["pos"] = random.choice(friendly)
 
     st.session_state.logs = ai_logs + st.session_state.logs
-    st.session_state.turn_reports = ai_logs
 
 
 # --- ヘッダー＆全領地支配チェック ---
@@ -472,7 +475,7 @@ if st.session_state.phase == 0:
                 st.write(info["desc"])
                 if st.button(f"{n_name} で開始する", key=f"select_{info['id']}", type="primary"):
                     init_world(n_name)
-                    st.session_state.logs.append(f"▶ {n_name} を担当国家として選択しました。")
+                    st.session_state.logs.insert(0, f"▶ {n_name} を担当国家として選択しました。")
                     st.rerun()
 
 
@@ -490,10 +493,13 @@ elif st.session_state.phase == 1:
         upgrade_cost = lv * 150
         st.metric("現在の産業レベル", f"Lv.{lv}")
         st.write(f"産業強化コスト: **{upgrade_cost} G**（毎ターン収入 +60 G）")
-        if st.button("🏭 産業を活性化する（レベルアップ）", disabled=st.session_state.funds[p_nat] < upgrade_cost):
+        if st.button(
+            "🏭 産業を活性化する（レベルアップ）",
+            disabled=st.session_state.funds[p_nat] < upgrade_cost,
+        ):
             st.session_state.funds[p_nat] -= upgrade_cost
             st.session_state.industry_lv[p_nat] += 1
-            st.session_state.logs.append(f"🏭 【自国】産業レベルが Lv.{lv+1} に上昇しました！")
+            st.session_state.logs.insert(0, f"🏭 【自国】産業レベルが Lv.{lv+1} に上昇しました！")
             st.rerun()
 
     with c2:
@@ -515,7 +521,9 @@ elif st.session_state.phase == 2:
     locked_core = p_info["core"]
 
     st.subheader("フェーズ2：魔道機甲生産フェーズ")
-    st.write(f"資金を使って魔道機甲を生産します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。")
+    st.write(
+        f"資金を使って魔道機甲を生産します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
+    )
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
@@ -555,7 +563,7 @@ elif st.session_state.phase == 2:
             new_u["name"] = unit_name
             new_u["slot"] = FORMATION_SLOTS[0]
             st.session_state.hangar[p_nat].append(new_u)
-            st.session_state.logs.append(f"🛠️ 【自国】魔道機甲「{unit_name}」を生産しました。")
+            st.session_state.logs.insert(0, f"🛠️ 【自国】魔道機甲「{unit_name}」を生産しました。")
             st.rerun()
 
     st.write(f"**現在のハンガー保有数:** {len(st.session_state.hangar[p_nat])} 機")
@@ -571,16 +579,19 @@ elif st.session_state.phase == 2:
 elif st.session_state.phase == 3:
     p_nat = st.session_state.player_nation
     st.subheader("フェーズ3：部隊編成・戦闘配置フェーズ")
-    st.write("4つの部隊（第1〜第4部隊）に魔道機甲を編成し、戦闘時の陣形配置（前衛・上／前衛・下／後衛・中央）を決定してください。")
+    st.write(
+        "4つの部隊（第1〜第4部隊）に魔道機甲を編成し、戦闘時の陣形配置（前衛・上／前衛・下／後衛・中央）を決定してください。"
+    )
 
     user_corps = st.session_state.corps[p_nat]
     hangar_list = st.session_state.hangar[p_nat]
 
-    # すでに部隊に組み込まれている機体ID一覧
     assigned_uids = {u["uid"] for cp in user_corps for u in cp["units"]}
     available_units = [u for u in hangar_list if u["uid"] not in assigned_uids]
 
-    corp_tabs = st.tabs([f"{cp['id']}（位置:{cp['pos'][0]+1},{cp['pos'][1]+1}）" for cp in user_corps])
+    corp_tabs = st.tabs(
+        [f"{cp['id']}（位置:{cp['pos'][0]+1},{cp['pos'][1]+1}）" for cp in user_corps]
+    )
     for idx, tab in enumerate(corp_tabs):
         cp = user_corps[idx]
         with tab:
@@ -601,7 +612,9 @@ elif st.session_state.phase == 3:
 
             if len(cp["units"]) < 3 and available_units:
                 add_map = {f"{u['name']}（戦力:{u['power']}）": u for u in available_units}
-                pick_label = st.selectbox("ハンガーから追加する機体", list(add_map.keys()), key=f"add_sel_{idx}")
+                pick_label = st.selectbox(
+                    "ハンガーから追加する機体", list(add_map.keys()), key=f"add_sel_{idx}"
+                )
                 if st.button("部隊に追加", key=f"add_btn_{idx}"):
                     cp["units"].append(add_map[pick_label])
                     st.rerun()
@@ -614,7 +627,7 @@ elif st.session_state.phase == 3:
 
 
 # =========================================================
-# フェーズ4：侵攻フェーズ（移動＆JS自動戦闘）
+# フェーズ4：侵攻フェーズ（現在マップ表示＆移動＆画像付きJS自動戦闘）
 # =========================================================
 elif st.session_state.phase == 4:
     p_nat = st.session_state.player_nation
@@ -634,8 +647,14 @@ elif st.session_state.phase == 4:
     friendly_adj = [pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] == p_nat]
     hostile_adj = [pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] != p_nat]
 
-    act_col1, act_col2 = st.columns(2)
-    with act_col1:
+    # 現在のマップ表示
+    top_map_col, top_cmd_col = st.columns([1.35, 1])
+    with top_map_col:
+        st.markdown("### 🗺️ 現在の戦略マップ")
+        st.markdown(render_map_html(highlight_pos=(cur_r, cur_c)), unsafe_allow_html=True)
+        st.caption(f"黄枠: {active_corp['id']} の現在地 ({cur_r+1}, {cur_c+1}) / [隊1〜隊4]: 部隊位置")
+
+    with top_cmd_col:
         st.markdown("### 🧭 自領内移動")
         if friendly_adj:
             move_target = st.selectbox(
@@ -644,16 +663,17 @@ elif st.session_state.phase == 4:
                 format_func=lambda p: f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}]",
                 key="move_sel",
             )
-            if st.button("この領地へ移動する"):
+            if st.button("この領地へ移動する", use_container_width=True):
                 active_corp["pos"] = move_target
-                st.session_state.logs.append(
-                    f"🧭 【自国】{active_corp['id']} が ({move_target[0]+1},{move_target[1]+1}) へ移動しました。"
+                st.session_state.logs.insert(
+                    0,
+                    f"🧭 【自国】{active_corp['id']} が ({move_target[0]+1},{move_target[1]+1}) へ移動しました。",
                 )
                 st.rerun()
         else:
             st.info("隣接する自国領地がありません。")
 
-    with act_col2:
+        st.markdown("---")
         st.markdown("### ⚔️ 隣接領地への侵攻（自動戦闘）")
         if hostile_adj and active_corp["units"]:
             inv_target = st.selectbox(
@@ -662,7 +682,7 @@ elif st.session_state.phase == 4:
                 format_func=lambda p: f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - {st.session_state.owner_grid[p[0]][p[1]] or '中立'}",
                 key="inv_sel",
             )
-            if st.button("⚔️ 侵攻開始（自動戦闘を実行）", type="primary"):
+            if st.button("⚔️ 侵攻開始（自動戦闘を実行）", type="primary", use_container_width=True):
                 tr, tc = inv_target
                 defender = st.session_state.owner_grid[tr][tc]
                 terrain = st.session_state.terrain_grid[tr][tc]
@@ -676,7 +696,31 @@ elif st.session_state.phase == 4:
                 )
                 won = atk_power >= def_power
 
-                # 勝敗反映
+                # 部隊機体の画像DataURIを収集
+                unit_visuals = []
+                for u in active_corp["units"]:
+                    u_img_path, _ = resolve_machine_image(
+                        u["chassis_id"], u["core_id"], u["armor_id"], u["weapon_id"]
+                    )
+                    unit_visuals.append(
+                        {
+                            "name": u["name"],
+                            "slot": u.get("slot", "前衛・上"),
+                            "img_uri": image_to_data_uri(u_img_path),
+                        }
+                    )
+
+                # 敵機体の画像DataURI（存在すれば取得）
+                enemy_img_uri = None
+                if defender:
+                    def_corps = st.session_state.corps[defender]
+                    if def_corps and def_corps[0]["units"]:
+                        du = def_corps[0]["units"][0]
+                        d_path, _ = resolve_machine_image(
+                            du["chassis_id"], du["core_id"], du["armor_id"], du["weapon_id"]
+                        )
+                        enemy_img_uri = image_to_data_uri(d_path)
+
                 if won:
                     st.session_state.owner_grid[tr][tc] = p_nat
                     active_corp["pos"] = (tr, tc)
@@ -695,20 +739,18 @@ elif st.session_state.phase == 4:
                     "atk_power": atk_power,
                     "def_power": def_power,
                     "won": won,
-                    "player_units": [
-                        {"name": u["name"], "slot": u.get("slot", "前衛・上")}
-                        for u in active_corp["units"]
-                    ],
+                    "player_units": unit_visuals,
+                    "enemy_img_uri": enemy_img_uri,
                     "target_label": f"({tr+1},{tc+1}) {terrain}",
                 }
                 st.rerun()
         else:
             st.info("侵攻可能な隣接領地がないか、部隊に機体がありません。")
 
-    # 自動戦闘（HTML5 Canvas + JavaScript）表示
+    # 自動戦闘（HTML5 Canvas + JavaScript 機体画像移動＆攻撃）
     if st.session_state.battle_data:
         b_json = json.dumps(st.session_state.battle_data)
-        st.markdown("### 💥 戦闘シミュレーション結果")
+        st.markdown("### 💥 戦闘シミュレーション（機体画像・自動攻撃）")
         battle_html = f"""
 <!DOCTYPE html>
 <html>
@@ -720,13 +762,35 @@ elif st.session_state.phase == 4:
 </style>
 </head>
 <body>
-<canvas id="battleCanvas" width="720" height="280"></canvas>
-<div id="resultBanner" class="banner">戦闘演算中...</div>
+<canvas id="battleCanvas" width="760" height="320"></canvas>
+<div id="resultBanner" class="banner">戦闘アニメーション再生中...</div>
 <script>
   const b = {b_json};
   const canvas = document.getElementById('battleCanvas');
   const ctx = canvas.getContext('2d');
   let frame = 0;
+
+  // 自軍機体画像のプリロード
+  const pImages = b.player_units.map(u => {{
+    if (!u.img_uri) return null;
+    const img = new Image();
+    img.src = u.img_uri;
+    return img;
+  }});
+
+  // 敵機体画像のプリロード
+  let eImage = null;
+  if (b.enemy_img_uri) {{
+    eImage = new Image();
+    eImage.src = b.enemy_img_uri;
+  }}
+
+  function getSlotY(slot, index) {{
+    if (slot === '前衛・上') return 45;
+    if (slot === '前衛・下') return 205;
+    if (slot === '後衛・中央') return 125;
+    return 45 + index * 80;
+  }}
 
   function drawBattle() {{
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -734,44 +798,88 @@ elif st.session_state.phase == 4:
     // 戦場ライン
     ctx.strokeStyle = '#30363d';
     ctx.setLineDash([6, 6]);
-    ctx.beginPath(); ctx.moveTo(360, 20); ctx.lineTo(360, 260); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(380, 15); ctx.lineTo(380, 305); ctx.stroke();
     ctx.setLineDash([]);
 
-    // プレイヤー陣営（左→中央へ進行）
-    const advance = Math.min(frame * 2.5, 110);
+    // 進行度（0〜1）
+    const moveProgress = Math.min(frame / 45, 1);
     const pCount = Math.max(1, b.player_units.length);
+
     for (let i = 0; i < pCount; i++) {{
-      const y = 60 + i * 75;
-      const x = 110 + advance;
-      ctx.fillStyle = b.player_color;
-      ctx.fillRect(x, y, 44, 24);
-      ctx.fillStyle = '#fff';
-      ctx.font = '11px sans-serif';
-      const label = b.player_units[i] ? b.player_units[i].name : '自軍機';
-      ctx.fillText(label, x, y - 5);
+      const u = b.player_units[i] || {{ name: '自軍機', slot: '前衛・上' }};
+      const isRear = u.slot === '後衛・中央';
+      const baseX = isRear ? 50 : 95;
+      const targetAdvance = isRear ? 90 : 165;
+      // 攻撃時の突進/反動モーション
+      const attackSurge = (frame >= 45 && frame <= 75) ? Math.sin(((frame - 45) / 30) * Math.PI) * 28 : 0;
+      const retreatOffset = (!b.won && frame > 75) ? Math.min((frame - 75) * 4, 120) : 0;
+      const x = baseX + targetAdvance * moveProgress + attackSurge - retreatOffset;
+      const y = getSlotY(u.slot, i);
+
+      const img = pImages[i];
+      if (img && img.complete && img.naturalWidth > 0) {{
+        ctx.drawImage(img, x, y, 68, 52);
+      }} else {{
+        ctx.fillStyle = b.player_color;
+        ctx.fillRect(x, y, 68, 52);
+      }}
+
+      // 攻撃ビーム・弾丸描画
+      if (frame >= 45 && frame <= 85) {{
+        const beamProgress = (frame - 45) / 40;
+        const bx = x + 68 + (560 - (x + 68)) * beamProgress;
+        const by = y + 26;
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.arc(bx, by, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }}
+
+      ctx.strokeStyle = b.player_color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, 68, 52);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(u.name + ' [' + u.slot + ']', x, y - 4);
     }}
 
     // 敵陣営（右）
     const eCount = 3;
     for (let i = 0; i < eCount; i++) {{
-      const y = 60 + i * 75;
-      const x = 560 - (b.won ? 0 : advance * 0.4);
-      ctx.fillStyle = b.enemy_color;
-      ctx.fillRect(x, y, 44, 24);
-      ctx.fillStyle = '#fff';
-      ctx.font = '11px sans-serif';
-      ctx.fillText(b.enemy_name.slice(0, 6), x, y - 5);
+      const y = 45 + i * 80;
+      const x = 570;
+      const destroyed = b.won && frame > 70;
+
+      if (!destroyed) {{
+        if (eImage && eImage.complete && eImage.naturalWidth > 0) {{
+          ctx.drawImage(eImage, x, y, 68, 52);
+        }} else {{
+          ctx.fillStyle = b.enemy_color;
+          ctx.fillRect(x, y, 68, 52);
+        }}
+        ctx.strokeStyle = b.enemy_color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, 68, 52);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(b.enemy_name.slice(0, 8), x, y - 4);
+      }} else {{
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('💥 撃破', x + 10, y + 30);
+      }}
     }}
 
-    // 交戦エフェクト
-    if (frame > 25 && frame < 65) {{
-      ctx.fillStyle = '#f1c40f';
+    // 交戦爆発エフェクト
+    if (frame >= 55 && frame <= 85) {{
+      ctx.fillStyle = b.won ? 'rgba(241, 196, 15, 0.75)' : 'rgba(231, 76, 60, 0.75)';
       ctx.beginPath();
-      ctx.arc(360, 140, 18 + (frame % 12), 0, Math.PI * 2);
+      ctx.arc(590, 150, 22 + ((frame - 55) % 14), 0, Math.PI * 2);
       ctx.fill();
     }}
 
-    if (frame < 75) {{
+    if (frame < 95) {{
       frame++;
       requestAnimationFrame(drawBattle);
     }} else {{
@@ -790,7 +898,7 @@ elif st.session_state.phase == 4:
 </body>
 </html>
 """
-        st.components.v1.html(battle_html, height=330)
+        st.components.v1.html(battle_html, height=375)
 
     st.markdown("---")
     if st.button("➡️ 他国の行動を実行し、フェーズ5（ターン結果・マップ）へ進む", type="primary"):
@@ -819,9 +927,11 @@ elif st.session_state.phase == 5:
     if st.button("🔄 次のターン（フェーズ1：資金調達）へ進む", type="primary"):
         p_nat = st.session_state.player_nation
         inc = get_income(p_nat)
-        st.session_state.funds[p_nat] += inc
+        st.session_state.funds[p_nat] = st.session_state.funds[p_nat] + inc
         st.session_state.turn += 1
         st.session_state.phase = 1
         st.session_state.battle_data = None
-        st.session_state.logs.insert(0, f"=== 第 {st.session_state.turn} ターン開始（自国収入 +{inc} G）===")
+        st.session_state.logs.insert(
+            0, f"=== 第 {st.session_state.turn} ターン開始（自国収入 +{inc} G → 所持 {st.session_state.funds[p_nat]} G）==="
+        )
         st.rerun()
