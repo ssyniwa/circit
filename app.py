@@ -191,7 +191,11 @@ def image_to_data_uri(img_path):
     if not img_path or not os.path.exists(img_path):
         return None
     ext = os.path.splitext(img_path)[1].lower()
-    mime = "image/png" if ext == ".png" else ("image/jpeg" if ext in [".jpg", ".jpeg"] else "image/webp")
+    mime = (
+        "image/png"
+        if ext == ".png"
+        else ("image/jpeg" if ext in [".jpg", ".jpeg"] else "image/webp")
+    )
     with open(img_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
     return f"data:{mime};base64,{b64}"
@@ -272,7 +276,14 @@ def get_income(nation_name):
         for c in range(8)
         if st.session_state.owner_grid[r][c] == nation_name
     )
-    return 100 + (st.session_state.industry_lv[nation_name] * 60) + (owned_count * 25)
+    lv = st.session_state.industry_lv.get(nation_name, 1)
+    return 100 + (lv * 60) + (owned_count * 25)
+
+
+def add_funds(nation_name, amount):
+    updated = dict(st.session_state.funds)
+    updated[nation_name] = updated.get(nation_name, 0) + amount
+    st.session_state.funds = updated
 
 
 def get_adjacent_cells(r, c):
@@ -353,9 +364,9 @@ def run_ai_economy_and_production():
         if nat == p_nat:
             continue
         inc = get_income(nat)
-        st.session_state.funds[nat] += inc
+        add_funds(nat, inc)
         if st.session_state.funds[nat] >= 250 and st.session_state.industry_lv[nat] < 8:
-            st.session_state.funds[nat] -= 150
+            add_funds(nat, -150)
             st.session_state.industry_lv[nat] += 1
         core_name = NATIONS[nat]["core"]
         chassis_choice = random.choice(list(CHASSIS_OPTIONS.keys()))
@@ -363,7 +374,7 @@ def run_ai_economy_and_production():
         weapon_choice = random.choice(list(WEAPON_OPTIONS.keys()))
         unit = calc_machine_stats(chassis_choice, core_name, armor_choice, weapon_choice)
         if st.session_state.funds[nat] >= unit["cost"]:
-            st.session_state.funds[nat] -= unit["cost"]
+            add_funds(nat, -unit["cost"])
             unit["uid"] = f"{NATIONS[nat]['id']}_t{st.session_state.turn}_{random.randint(100,999)}"
             unit["name"] = f"{chassis_choice[:4]}機"
             unit["slot"] = random.choice(FORMATION_SLOTS)
@@ -449,11 +460,13 @@ if st.session_state.player_nation:
             st.rerun()
         st.stop()
 
+    current_funds = st.session_state.funds.get(p_nat, 0)
+    current_inc = get_income(p_nat)
     h1, h2, h3, h4, h5 = st.columns(5)
     h1.metric("担当国家", f"{p_info['emoji']} {p_nat}")
     h2.metric("現在ターン / フェーズ", f"第{st.session_state.turn}T / Ph.{st.session_state.phase}")
-    h3.metric("所持資金", f"{st.session_state.funds[p_nat]} G")
-    h4.metric("毎ターン収入予測", f"+{get_income(p_nat)} G")
+    h3.metric("所持資金", f"{current_funds} G")
+    h4.metric("毎ターン収入予測", f"+{current_inc} G")
     h5.metric("支配領地", f"{owned_total} / 64")
     st.markdown("---")
 
@@ -497,7 +510,7 @@ elif st.session_state.phase == 1:
             "🏭 産業を活性化する（レベルアップ）",
             disabled=st.session_state.funds[p_nat] < upgrade_cost,
         ):
-            st.session_state.funds[p_nat] -= upgrade_cost
+            add_funds(p_nat, -upgrade_cost)
             st.session_state.industry_lv[p_nat] += 1
             st.session_state.logs.insert(0, f"🏭 【自国】産業レベルが Lv.{lv+1} に上昇しました！")
             st.rerun()
@@ -557,7 +570,7 @@ elif st.session_state.phase == 2:
         )
         can_afford = st.session_state.funds[p_nat] >= stats["cost"]
         if st.button("🛠️ この機体を生産する", type="primary", disabled=not can_afford):
-            st.session_state.funds[p_nat] -= stats["cost"]
+            add_funds(p_nat, -stats["cost"])
             new_u = dict(stats)
             new_u["uid"] = f"p_t{st.session_state.turn}_{random.randint(1000,9999)}"
             new_u["name"] = unit_name
@@ -574,7 +587,7 @@ elif st.session_state.phase == 2:
 
 
 # =========================================================
-# フェーズ3：部隊編成フェーズ
+# フェーズ3：部隊編成フェーズ（機体画像表示対応）
 # =========================================================
 elif st.session_state.phase == 3:
     p_nat = st.session_state.player_nation
@@ -597,8 +610,18 @@ elif st.session_state.phase == 3:
         with tab:
             st.write(f"**現在の配置機体数:** {len(cp['units'])} / 3 機")
             for u_i, u in enumerate(cp["units"]):
-                uc1, uc2, uc3 = st.columns([3, 2, 1])
-                uc1.write(f"🤖 **{u['name']}**（戦力:{u['power']} / {u['chassis']}）")
+                u_img_path, _ = resolve_machine_image(
+                    u["chassis_id"], u["core_id"], u["armor_id"], u["weapon_id"]
+                )
+                uc0, uc1, uc2, uc3 = st.columns([1.1, 3, 2, 1])
+                with uc0:
+                    if u_img_path:
+                        st.image(u_img_path, use_container_width=True)
+                    else:
+                        st.caption("画像なし")
+                uc1.write(
+                    f"🤖 **{u['name']}**\n\n戦力:{u['power']} / {u['chassis']} / {u['weapon']}"
+                )
                 new_slot = uc2.selectbox(
                     "戦闘配置",
                     FORMATION_SLOTS,
@@ -615,9 +638,24 @@ elif st.session_state.phase == 3:
                 pick_label = st.selectbox(
                     "ハンガーから追加する機体", list(add_map.keys()), key=f"add_sel_{idx}"
                 )
-                if st.button("部隊に追加", key=f"add_btn_{idx}"):
-                    cp["units"].append(add_map[pick_label])
-                    st.rerun()
+                picked_u = add_map[pick_label]
+                p_img_path, _ = resolve_machine_image(
+                    picked_u["chassis_id"],
+                    picked_u["core_id"],
+                    picked_u["armor_id"],
+                    picked_u["weapon_id"],
+                )
+                ac1, ac2 = st.columns([1, 4])
+                with ac1:
+                    if p_img_path:
+                        st.image(p_img_path, use_container_width=True)
+                with ac2:
+                    st.write(
+                        f"選択中: **{picked_u['name']}**（{picked_u['chassis']} / {picked_u['armor']} / {picked_u['weapon']}）"
+                    )
+                    if st.button("部隊に追加", key=f"add_btn_{idx}"):
+                        cp["units"].append(picked_u)
+                        st.rerun()
 
     st.markdown("---")
     if st.button("➡️ フェーズ4（侵攻・移動）へ進む", type="primary"):
@@ -647,7 +685,6 @@ elif st.session_state.phase == 4:
     friendly_adj = [pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] == p_nat]
     hostile_adj = [pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] != p_nat]
 
-    # 現在のマップ表示
     top_map_col, top_cmd_col = st.columns([1.35, 1])
     with top_map_col:
         st.markdown("### 🗺️ 現在の戦略マップ")
@@ -696,7 +733,6 @@ elif st.session_state.phase == 4:
                 )
                 won = atk_power >= def_power
 
-                # 部隊機体の画像DataURIを収集
                 unit_visuals = []
                 for u in active_corp["units"]:
                     u_img_path, _ = resolve_machine_image(
@@ -710,7 +746,6 @@ elif st.session_state.phase == 4:
                         }
                     )
 
-                # 敵機体の画像DataURI（存在すれば取得）
                 enemy_img_uri = None
                 if defender:
                     def_corps = st.session_state.corps[defender]
@@ -747,7 +782,6 @@ elif st.session_state.phase == 4:
         else:
             st.info("侵攻可能な隣接領地がないか、部隊に機体がありません。")
 
-    # 自動戦闘（HTML5 Canvas + JavaScript 機体画像移動＆攻撃）
     if st.session_state.battle_data:
         b_json = json.dumps(st.session_state.battle_data)
         st.markdown("### 💥 戦闘シミュレーション（機体画像・自動攻撃）")
@@ -770,7 +804,6 @@ elif st.session_state.phase == 4:
   const ctx = canvas.getContext('2d');
   let frame = 0;
 
-  // 自軍機体画像のプリロード
   const pImages = b.player_units.map(u => {{
     if (!u.img_uri) return null;
     const img = new Image();
@@ -778,7 +811,6 @@ elif st.session_state.phase == 4:
     return img;
   }});
 
-  // 敵機体画像のプリロード
   let eImage = null;
   if (b.enemy_img_uri) {{
     eImage = new Image();
@@ -795,13 +827,11 @@ elif st.session_state.phase == 4:
   function drawBattle() {{
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 戦場ライン
     ctx.strokeStyle = '#30363d';
     ctx.setLineDash([6, 6]);
     ctx.beginPath(); ctx.moveTo(380, 15); ctx.lineTo(380, 305); ctx.stroke();
     ctx.setLineDash([]);
 
-    // 進行度（0〜1）
     const moveProgress = Math.min(frame / 45, 1);
     const pCount = Math.max(1, b.player_units.length);
 
@@ -810,7 +840,6 @@ elif st.session_state.phase == 4:
       const isRear = u.slot === '後衛・中央';
       const baseX = isRear ? 50 : 95;
       const targetAdvance = isRear ? 90 : 165;
-      // 攻撃時の突進/反動モーション
       const attackSurge = (frame >= 45 && frame <= 75) ? Math.sin(((frame - 45) / 30) * Math.PI) * 28 : 0;
       const retreatOffset = (!b.won && frame > 75) ? Math.min((frame - 75) * 4, 120) : 0;
       const x = baseX + targetAdvance * moveProgress + attackSurge - retreatOffset;
@@ -824,7 +853,6 @@ elif st.session_state.phase == 4:
         ctx.fillRect(x, y, 68, 52);
       }}
 
-      // 攻撃ビーム・弾丸描画
       if (frame >= 45 && frame <= 85) {{
         const beamProgress = (frame - 45) / 40;
         const bx = x + 68 + (560 - (x + 68)) * beamProgress;
@@ -844,7 +872,6 @@ elif st.session_state.phase == 4:
       ctx.fillText(u.name + ' [' + u.slot + ']', x, y - 4);
     }}
 
-    // 敵陣営（右）
     const eCount = 3;
     for (let i = 0; i < eCount; i++) {{
       const y = 45 + i * 80;
@@ -871,7 +898,6 @@ elif st.session_state.phase == 4:
       }}
     }}
 
-    // 交戦爆発エフェクト
     if (frame >= 55 && frame <= 85) {{
       ctx.fillStyle = b.won ? 'rgba(241, 196, 15, 0.75)' : 'rgba(231, 76, 60, 0.75)';
       ctx.beginPath();
@@ -927,11 +953,12 @@ elif st.session_state.phase == 5:
     if st.button("🔄 次のターン（フェーズ1：資金調達）へ進む", type="primary"):
         p_nat = st.session_state.player_nation
         inc = get_income(p_nat)
-        st.session_state.funds[p_nat] = st.session_state.funds[p_nat] + inc
+        add_funds(p_nat, inc)
         st.session_state.turn += 1
         st.session_state.phase = 1
         st.session_state.battle_data = None
         st.session_state.logs.insert(
-            0, f"=== 第 {st.session_state.turn} ターン開始（自国収入 +{inc} G → 所持 {st.session_state.funds[p_nat]} G）==="
+            0,
+            f"=== 第 {st.session_state.turn} ターン開始（自国収入 +{inc} G → 所持 {st.session_state.funds[p_nat]} G）===",
         )
         st.rerun()
