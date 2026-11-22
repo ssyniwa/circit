@@ -278,16 +278,24 @@ def image_to_data_uri(img_path):
 
 
 def create_mass_unit(nation_name, corp_idx, slot_idx):
-    """初期配備用の武装無し量産型機体を生成"""
+    """初期配備・敗北再編成用の武装無し量産型機体を生成"""
     core_name = NATIONS[nation_name]["core"]
     m = calc_machine_stats(
         "全地形万能バギー", core_name, "標準耐熱コーティング", "武装なし（軽量化）"
     )
-    m["uid"] = f"{NATIONS[nation_name]['id']}_c{corp_idx+1}_s{slot_idx+1}"
+    m["uid"] = (
+        f"{NATIONS[nation_name]['id']}_c{corp_idx+1}_s{slot_idx+1}_{random.randint(100,999)}"
+    )
     m["name"] = f"量産型{corp_idx+1}-{slot_idx+1}(無装)"
     m["slot"] = FORMATION_SLOTS[slot_idx]
     m["is_mass"] = True
     return m
+
+
+def reset_corp_to_initial(nation_name, corp, corp_idx):
+    """敗北した部隊を本拠地へ戻し、武装無しの量産型機体6機の初期状態へリセット"""
+    corp["pos"] = NATIONS[nation_name]["home"]
+    corp["units"] = [create_mass_unit(nation_name, corp_idx, s_i) for s_i in range(6)]
 
 
 def init_world(player_nation=None):
@@ -315,7 +323,6 @@ def init_world(player_nation=None):
     funds = {n: 600 for n in NATIONS}
     industry_lv = {n: 1 for n in NATIONS}
 
-    # 全国家・全4部隊に6機ずつの武装無し量産型機体を初期配備し、格納庫リストは空で開始
     hangar = {n: [] for n in NATIONS}
     corps = {}
     for n_name, info in NATIONS.items():
@@ -376,11 +383,12 @@ def get_adjacent_cells(r, c):
 
 
 def get_garrison_corps(r, c, owner_nation):
+    """指定座標に駐留している owner_nation の (部隊インデックス, 部隊オブジェクト) リストを返す"""
     if not owner_nation:
         return []
     return [
-        cp
-        for cp in st.session_state.corps[owner_nation]
+        (idx, cp)
+        for idx, cp in enumerate(st.session_state.corps[owner_nation])
         if cp["pos"] == (r, c) and len(cp["units"]) > 0
     ]
 
@@ -551,7 +559,6 @@ def run_ai_phase3_formation():
         if not hangar_units:
             continue
 
-        # 格納庫にある新鋭機と既存部隊の量産機を交換
         for cp in st.session_state.corps[nat]:
             if not hangar_units:
                 break
@@ -571,7 +578,7 @@ def run_ai_phase4_movement_and_invasion():
     for nat, info in NATIONS.items():
         if nat == p_nat:
             continue
-        for cp in st.session_state.corps[nat]:
+        for cp_idx, cp in enumerate(st.session_state.corps[nat]):
             cp["invaded_this_turn"] = False
             if not cp["units"]:
                 continue
@@ -657,7 +664,7 @@ def run_ai_phase4_movement_and_invasion():
                     for u in cp["units"]
                 )
                 def_info = NATIONS[defender]
-                def_units = [u for g_cp in garrison_list for u in g_cp["units"]]
+                def_units = [u for _, g_cp in garrison_list for u in g_cp["units"]]
                 def_power = sum(
                     calc_unit_effective_power(u, terrain, def_info["terrain"])
                     for u in def_units
@@ -665,17 +672,15 @@ def run_ai_phase4_movement_and_invasion():
                 if atk_power >= def_power:
                     st.session_state.owner_grid[tr][tc] = nat
                     cp["pos"] = (tr, tc)
-                    for g_cp in garrison_list:
-                        g_cp["pos"] = def_info["home"]
-                        g_cp["units"] = g_cp["units"][:1]
+                    for g_idx, g_cp in garrison_list:
+                        reset_corp_to_initial(defender, g_cp, g_idx)
                     ai_logs.append(
-                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領！"
+                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（敗北部隊は量産型6機へ再編成）！"
                     )
                 else:
-                    cp["pos"] = info["home"]
-                    cp["units"] = cp["units"][:1]
+                    reset_corp_to_initial(nat, cp, cp_idx)
                     ai_logs.append(
-                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退。"
+                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（量産型6機へ再編成）。"
                     )
 
     st.session_state.logs = ai_logs + st.session_state.logs
@@ -983,14 +988,14 @@ elif st.session_state.phase == 3:
 
 
 # =========================================================
-# フェーズ4：侵攻フェーズ（開閉式部隊ウィンドウ・自領移動無制限・侵攻1回）
+# フェーズ4：侵攻フェーズ（開閉式部隊ウィンドウ・敗北時量産6機リセット）
 # =========================================================
 elif st.session_state.phase == 4:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ4：侵攻・移動フェーズ")
     st.write(
-        "各部隊ウィンドウを開いて行動を指示してください。自国領地内の移動は何度でも可能、侵攻・占領は**各部隊1ターン1回まで**です。**中立地域および防衛部隊のいない敵国領地は戦闘なしで無血占領**できます。"
+        "各部隊ウィンドウを開いて行動を指示してください。敗北した部隊は本拠地へ撤退し、**武装無しの量産型機体6機の初期状態**に戻ります。"
     )
 
     user_corps = st.session_state.corps[p_nat]
@@ -1127,7 +1132,7 @@ elif st.session_state.phase == 4:
                             )
                             garrison_list = get_garrison_corps(tr, tc, defender)
                             def_units = [
-                                u for g_cp in garrison_list for u in g_cp["units"]
+                                u for _, g_cp in garrison_list for u in g_cp["units"]
                             ]
                             def_power = sum(
                                 calc_unit_effective_power(u, terrain, def_info["terrain"])
@@ -1179,14 +1184,12 @@ elif st.session_state.phase == 4:
                             if won:
                                 st.session_state.owner_grid[tr][tc] = p_nat
                                 cp["pos"] = (tr, tc)
-                                for g_cp in garrison_list:
-                                    g_cp["pos"] = def_info["home"]
-                                    g_cp["units"] = g_cp["units"][:1]
-                                res_msg = f"🏆 【自国】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領！"
+                                for g_idx, g_cp in garrison_list:
+                                    reset_corp_to_initial(defender, g_cp, g_idx)
+                                res_msg = f"🏆 【自国】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（敵部隊は量産型6機へ再編成）！"
                             else:
-                                cp["pos"] = p_info["home"]
-                                cp["units"] = cp["units"][:1]
-                                res_msg = f"💥 【自国】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退しました。"
+                                reset_corp_to_initial(p_nat, cp, idx)
+                                res_msg = f"💥 【自国】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（武装無しの量産型6機へ再編成）。"
 
                             st.session_state.logs.insert(0, res_msg)
                             st.session_state.battle_data = {
@@ -1408,7 +1411,7 @@ elif st.session_state.phase == 4:
         el.innerText = '【勝利】' + b.target_label + ' を制圧！（戦力 ' + b.atk_power + ' vs ' + b.def_power + '）';
       }} else {{
         el.style.color = '#e74c3c';
-        el.innerText = '【敗北】' + b.target_label + ' の侵攻に失敗し本拠地へ撤退（戦力 ' + b.atk_power + ' vs ' + b.def_power + '）';
+        el.innerText = '【敗北】' + b.target_label + ' の侵攻に失敗し本拠地へ撤退・量産型6機へ再編成（戦力 ' + b.atk_power + ' vs ' + b.def_power + '）';
       }}
     }}
   }}
