@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# 1. 国家データベース
+# 1. 国家データベース（各部隊の隊長情報・戦略タイプ追加）
 NATIONS = {
     "魔導技術国家メイズ": {
         "id": "maze",
@@ -22,6 +22,12 @@ NATIONS = {
         "home": (0, 0),
         "strategy": "重装甲・正面突破型（軍備生産を最優先し、前衛重視で敵駐留地へ積極侵攻）",
         "desc": "荒れ地に君臨する魔導帝国。古龍の魔力を動力源とし、重装甲機による正面突破を得意とする。",
+        "commanders": [
+            {"name": "ヴァルカン・ブレイズ", "role": "第1部隊長 / 紅蓮突撃"},
+            {"name": "イグニス・クロウ", "role": "第2部隊長 / 破城重装"},
+            {"name": "アッシュ・ヴォルト", "role": "第3部隊長 / 荒野強襲"},
+            {"name": "ルビー・フレイム", "role": "第4部隊長 / 魔導砲撃"},
+        ],
     },
     "サイバー科学国家システムズ": {
         "id": "systems",
@@ -32,6 +38,12 @@ NATIONS = {
         "home": (0, 7),
         "strategy": "経済重視・電撃拡張型（産業投資を最優先し、高速機で無人・中立領地を急速拡大）",
         "desc": "高度に発達した科学都市国家。圧倒的な経済力と高速機動戦術で版図を広げる。",
+        "commanders": [
+            {"name": "ゼクス・コーダ", "role": "第1部隊長 / 電撃機動"},
+            {"name": "シエル・パルス", "role": "第2部隊長 / 電子戦術"},
+            {"name": "レイ・ボルテックス", "role": "第3部隊長 / 領域制圧"},
+            {"name": "ノヴァ・リンク", "role": "第4部隊長 / 広域偵察"},
+        ],
     },
     "水上自然都市融合国家オアシス": {
         "id": "oasis",
@@ -42,6 +54,12 @@ NATIONS = {
         "home": (7, 0),
         "strategy": "バランス・領域防衛型（産業と軍備を均等に育て、得意地形と防衛線を堅実に維持）",
         "desc": "自然と調和する水上都市国家。環境エーテルを利用した安定した戦線維持に長ける。",
+        "commanders": [
+            {"name": "リリア・ウェーブ", "role": "第1部隊長 / 水路防衛"},
+            {"name": "シルフ・リーフ", "role": "第2部隊長 / 環境機動"},
+            {"name": "コーラル・ミスト", "role": "第3部隊長 / 拠点護衛"},
+            {"name": "ナギ・ストリーム", "role": "第4部隊長 / 遊撃支援"},
+        ],
     },
     "月面開拓国家ムーンライト": {
         "id": "moonlight",
@@ -52,6 +70,12 @@ NATIONS = {
         "home": (7, 7),
         "strategy": "少数精鋭・長距離砲撃型（高コスト精鋭機を後衛主体で編成し、高火力砲撃で敵軍を粉砕）",
         "desc": "月面クレーターに築かれた開拓国家。未知の真空エネルギー機関による高火力砲撃戦を繰り広げる。",
+        "commanders": [
+            {"name": "ルナ・クレーター", "role": "第1部隊長 / 軌道狙撃"},
+            {"name": "セレス・エクリプス", "role": "第2部隊長 / 精鋭奇襲"},
+            {"name": "アーク・コスモス", "role": "第3部隊長 / 真空砲撃"},
+            {"name": "ステラ・オービット", "role": "第4部隊長 / 前線統制"},
+        ],
     },
 }
 
@@ -173,6 +197,33 @@ FORMATION_SLOTS = [
 ]
 
 
+def _find_image_by_stem(stem):
+    exts = [".png", ".jpg", ".jpeg", ".webp"]
+    for ext in exts:
+        path = os.path.join("image", stem + ext)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def resolve_nation_landscape_image(nation_name):
+    """国家風景画像（image/nation_<id>.png 等）を取得"""
+    nat_id = NATIONS[nation_name]["id"]
+    path = _find_image_by_stem(f"nation_{nat_id}")
+    if path:
+        return path, f"nation_{nat_id}"
+    return None, "未配置"
+
+
+def resolve_commander_image(nation_name, corp_no):
+    """各部隊の隊長画像（image/commander_<id>_corp<1..4>.png 等）を取得"""
+    nat_id = NATIONS[nation_name]["id"]
+    path = _find_image_by_stem(f"commander_{nat_id}_corp{corp_no}")
+    if path:
+        return path, f"commander_{nat_id}_corp{corp_no}"
+    return None, "未配置"
+
+
 def calc_machine_stats(chassis_name, core_name, armor_name, weapon_name):
     c = CHASSIS_OPTIONS[chassis_name]
     co = CORE_OPTIONS[core_name]
@@ -278,7 +329,6 @@ def image_to_data_uri(img_path):
 
 
 def create_mass_unit(nation_name, corp_idx, slot_idx):
-    """初期配備・敗北再編成用の武装無し量産型機体を生成"""
     core_name = NATIONS[nation_name]["core"]
     m = calc_machine_stats(
         "全地形万能バギー", core_name, "標準耐熱コーティング", "武装なし（軽量化）"
@@ -293,7 +343,6 @@ def create_mass_unit(nation_name, corp_idx, slot_idx):
 
 
 def reset_corp_to_initial(nation_name, corp, corp_idx):
-    """敗北した部隊を本拠地へ戻し、武装無しの量産型機体6機の初期状態へリセット"""
     corp["pos"] = NATIONS[nation_name]["home"]
     corp["units"] = [create_mass_unit(nation_name, corp_idx, s_i) for s_i in range(6)]
 
@@ -383,7 +432,6 @@ def get_adjacent_cells(r, c):
 
 
 def get_garrison_corps(r, c, owner_nation):
-    """指定座標に駐留している owner_nation の (部隊インデックス, 部隊オブジェクト) リストを返す"""
     if not owner_nation:
         return []
     return [
@@ -473,9 +521,6 @@ def render_map_html(highlight_pos=None):
     )
 
 
-# =========================================================
-# 他国（AI）のフェーズ別戦略行動
-# =========================================================
 def run_ai_phase1_economy():
     p_nat = st.session_state.player_nation
     for nat, info in NATIONS.items():
@@ -722,16 +767,30 @@ if st.session_state.player_nation:
 
 
 # =========================================================
-# フェーズ0：国家選択
+# フェーズ0：国家選択（各国の風景画像を表示）
 # =========================================================
 if st.session_state.phase == 0:
     st.subheader("フェーズ0：担当国家の選択")
-    st.write("4つの国家の基本情報・固有動力コア・AI戦略傾向を確認し、運営する国家を選択してください。")
+    st.write(
+        "4つの国家の風景・固有動力コア・AI戦略傾向を確認し、運営する国家を選択してください（`image/nation_<id>.png` を配置すると風景が表示されます）。"
+    )
 
     cols = st.columns(2)
     for idx, (n_name, info) in enumerate(NATIONS.items()):
         with cols[idx % 2]:
             with st.container(border=True):
+                land_path, land_tag = resolve_nation_landscape_image(n_name)
+                if land_path:
+                    st.image(
+                        land_path,
+                        caption=f"{n_name} 風景 [{land_tag}]",
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption(
+                        f"🖼️ 風景画像未配置: `image/nation_{info['id']}.png`（.jpg / .webp 可）"
+                    )
+
                 st.markdown(f"### {info['emoji']} {n_name}")
                 st.write(
                     f"**拠点地形:** {info['terrain']}（本拠地: {info['home'][0]+1}, {info['home'][1]+1}）"
@@ -785,7 +844,7 @@ elif st.session_state.phase == 1:
 
 
 # =========================================================
-# フェーズ2：魔道機甲生産フェーズ
+# フェーズ2：魔道機甲生産フェーズ（各部隊の隊長画像を表示）
 # =========================================================
 elif st.session_state.phase == 2:
     p_nat = st.session_state.player_nation
@@ -794,9 +853,31 @@ elif st.session_state.phase == 2:
 
     st.subheader("フェーズ2：魔道機甲生産フェーズ")
     st.write(
-        f"生産した機体は**格納庫リスト**に保管され、フェーズ3で部隊の機体と入れ替えることができます。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
+        f"各部隊の隊長を確認しながら魔道機甲を生産し、**格納庫リスト**へ保管します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
     )
 
+    # 自国4部隊の隊長一覧表示
+    st.markdown(f"#### 🎖️ {p_nat} 各部隊の隊長（全4名）")
+    cmd_cols = st.columns(4)
+    for c_idx, cmd_info in enumerate(p_info["commanders"]):
+        corp_no = c_idx + 1
+        cmd_img_path, cmd_tag = resolve_commander_image(p_nat, corp_no)
+        with cmd_cols[c_idx]:
+            with st.container(border=True):
+                if cmd_img_path:
+                    st.image(
+                        cmd_img_path,
+                        caption=f"第{corp_no}部隊長 [{cmd_tag}]",
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption(
+                        f"👤 隊長画像未配置:\n`image/commander_{p_info['id']}_corp{corp_no}.png`"
+                    )
+                st.markdown(f"**{cmd_info['name']}**")
+                st.caption(cmd_info["role"])
+
+    st.markdown("---")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         sel_chassis = st.selectbox("① フレーム・ボディ", list(CHASSIS_OPTIONS.keys()))
@@ -869,7 +950,6 @@ elif st.session_state.phase == 2:
         run_ai_phase2_production()
         st.session_state.phase = 3
         st.rerun()
-
 
 # =========================================================
 # フェーズ3：部隊編成フェーズ（開閉式・格納庫リストとの交換形態）
