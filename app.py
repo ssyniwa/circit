@@ -382,7 +382,6 @@ def calc_unit_effective_power(unit, terrain, nation_terrain, commander=None):
     if terrain == nation_terrain and unit["chassis_id"] != "buggy":
         p += 25
 
-    # 部隊長による戦力補正
     if commander:
         b_type = commander.get("bonus_type")
         b_val = commander.get("bonus_val", 0)
@@ -468,7 +467,6 @@ def handle_capital_fall(conqueror_nation, fallen_nation):
                 st.session_state.owner_grid[r][c] = conqueror_nation
                 transferred += 1
 
-    # 敗北国の部隊を撤収
     for cp in st.session_state.corps[fallen_nation]:
         cp["units"] = []
 
@@ -488,7 +486,7 @@ def get_threats_near_home(nation_name):
     hr, hc = NATIONS[nation_name]["home"]
     threats = []
     for other_nat, corp_list in st.session_state.corps.items():
-        if other_nat == nation_name:
+        if other_nat == nation_name or other_nat in st.session_state.defeated_nations:
             continue
         for cp in corp_list:
             if not cp["units"]:
@@ -497,6 +495,117 @@ def get_threats_near_home(nation_name):
             if abs(er - hr) + abs(ec - hc) <= 2:
                 threats.append((er, ec, other_nat, cp["id"]))
     return threats
+
+
+def execute_group_invasion(atk_nation, atk_corp_tuples, target_pos, terrain, logs_out):
+    """複数（または単一）の未侵攻部隊を同時侵攻させ、参加部隊を侵攻済みにする"""
+    atk_info = NATIONS[atk_nation]
+    tr, tc = target_pos
+    defender = st.session_state.owner_grid[tr][tc]
+    garrison_list = get_garrison_corps(tr, tc, defender)
+    corp_names = "・".join([cp["id"] for _, cp in atk_corp_tuples])
+
+    for _, cp in atk_corp_tuples:
+        cp["invaded_this_turn"] = True
+
+    if defender is None or len(garrison_list) == 0:
+        st.session_state.owner_grid[tr][tc] = atk_nation
+        for _, cp in atk_corp_tuples:
+            cp["pos"] = (tr, tc)
+        label = "中立地域" if defender is None else f"{defender}の無人領地"
+        logs_out.append(
+            f"🏳️ {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] の{label}を同時侵攻で占領！"
+        )
+        if defender and NATIONS[defender]["home"] == (tr, tc):
+            handle_capital_fall(atk_nation, defender)
+        return {
+            "won": True,
+            "atk_power": 0,
+            "def_power": 0,
+            "defender": defender or "中立",
+            "player_units": [],
+            "enemy_units": [],
+        }
+
+    atk_power = 0
+    atk_units_all = []
+    for c_idx, cp in atk_corp_tuples:
+        cmd_info = atk_info["commanders"][c_idx]
+        atk_units_all.extend(cp["units"])
+        atk_power += sum(
+            calc_unit_effective_power(u, terrain, atk_info["terrain"], cmd_info)
+            for u in cp["units"]
+        )
+
+    def_info = NATIONS[defender]
+    def_power = 0
+    def_units_all = []
+    for g_idx, g_cp in garrison_list:
+        g_cmd = def_info["commanders"][g_idx]
+        def_units_all.extend(g_cp["units"])
+        def_power += sum(
+            calc_unit_effective_power(u, terrain, def_info["terrain"], g_cmd)
+            for u in g_cp["units"]
+        )
+
+    won = atk_power >= def_power
+
+    unit_visuals = []
+    for u in atk_units_all[:6]:
+        u_img_path, _ = resolve_machine_image(
+            u["chassis_id"], u["core_id"], u["armor_id"], u["weapon_id"]
+        )
+        unit_visuals.append(
+            {
+                "name": u["name"],
+                "slot": u.get("slot", "前衛・上"),
+                "chassis_id": u["chassis_id"],
+                "weapon_id": u["weapon_id"],
+                "img_uri": image_to_data_uri(u_img_path),
+            }
+        )
+
+    enemy_visuals = []
+    for idx_d, du in enumerate(def_units_all[:6]):
+        d_path, _ = resolve_machine_image(
+            du["chassis_id"], du["core_id"], du["armor_id"], du["weapon_id"]
+        )
+        enemy_visuals.append(
+            {
+                "name": du["name"],
+                "slot": du.get("slot", FORMATION_SLOTS[idx_d % len(FORMATION_SLOTS)]),
+                "chassis_id": du["chassis_id"],
+                "weapon_id": du["weapon_id"],
+                "img_uri": image_to_data_uri(d_path),
+            }
+        )
+
+    if won:
+        st.session_state.owner_grid[tr][tc] = atk_nation
+        for _, cp in atk_corp_tuples:
+            cp["pos"] = (tr, tc)
+        for g_idx, g_cp in garrison_list:
+            reset_corp_to_initial(defender, g_cp, g_idx)
+        logs_out.append(
+            f"🏆 {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（戦力 {atk_power} vs {def_power}）！"
+        )
+        if def_info["home"] == (tr, tc):
+            handle_capital_fall(atk_nation, defender)
+    else:
+        for c_idx, cp in atk_corp_tuples:
+            reset_corp_to_initial(atk_nation, cp, c_idx)
+        logs_out.append(
+            f"💥 {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（量産型6機へ再編成・戦力 {atk_power} vs {def_power}）。"
+        )
+
+    return {
+        "won": won,
+        "atk_power": atk_power,
+        "def_power": def_power,
+        "defender": defender,
+        "player_units": unit_visuals,
+        "enemy_units": enemy_visuals,
+    }
 
 
 def init_world(player_nation=None):
@@ -587,7 +696,7 @@ def get_adjacent_cells(r, c):
 
 
 def get_garrison_corps(r, c, owner_nation):
-    if not owner_nation:
+    if not owner_nation or owner_nation in st.session_state.defeated_nations:
         return []
     return [
         (idx, cp)
@@ -785,17 +894,18 @@ def run_ai_phase3_formation():
 def run_ai_phase4_movement_and_invasion():
     p_nat = st.session_state.player_nation
     ai_logs = []
-    for nat, info in NATIONS.items():
+
+    for nat, info in list(NATIONS.items()):
         if nat == p_nat or nat in st.session_state.defeated_nations:
             continue
 
-        # 本拠地接近中の敵部隊をチェック（緊急防衛・討伐モード）
         threats = get_threats_near_home(nat)
         if threats:
             ai_logs.append(
                 f"🚨 {info['emoji']} 【AI:{nat}】本拠地周辺に敵接近を感知！全部隊を討伐・迎撃へ急行させます！"
             )
 
+        # まず各部隊を移動させる
         for cp_idx, cp in enumerate(st.session_state.corps[nat]):
             cp["invaded_this_turn"] = False
             if not cp["units"]:
@@ -805,22 +915,19 @@ def run_ai_phase4_movement_and_invasion():
                 cp["pos"] = info["home"]
                 r, c = cp["pos"]
 
-            cmd_info = info["commanders"][cp_idx]
-
-            # 1. 自領内移動（脅威がある場合は脅威座標へ最短接近、通常時は前線へ移動）
             for _step in range(3 if threats else 2):
                 adj = get_adjacent_cells(r, c)
                 friendly = [
-                    pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] == nat
+                    pos
+                    for pos in adj
+                    if st.session_state.owner_grid[pos[0]][pos[1]] == nat
                 ]
                 if threats:
-                    # 脅威と隣接していれば移動完了
                     threat_coords = {(t[0], t[1]) for t in threats}
                     if any(pos in threat_coords for pos in adj):
                         break
                     if not friendly:
                         break
-                    # 最も近い脅威へ近づく自領マスへ移動
                     best_move = min(
                         friendly,
                         key=lambda p: min(
@@ -850,15 +957,33 @@ def run_ai_phase4_movement_and_invasion():
                     cp["pos"] = best_move
                     r, c = cp["pos"]
 
-            # 2. 侵攻・討伐行動（各部隊ターン1回）
+        # 同じマスにいる「侵攻済みでない部隊」をグループ化して同時侵攻
+        pos_groups = {}
+        for cp_idx, cp in enumerate(st.session_state.corps[nat]):
+            if cp["units"] and not cp.get("invaded_this_turn"):
+                pos_groups.setdefault(cp["pos"], []).append((cp_idx, cp))
+
+        threat_coords = {(t[0], t[1]) for t in threats}
+
+        for origin_pos, group_list in pos_groups.items():
+            # 侵攻中にこの国が滅亡していた場合はスキップ
+            if nat in st.session_state.defeated_nations:
+                break
+            active_group = [
+                (i, c_obj)
+                for i, c_obj in group_list
+                if c_obj["units"] and not c_obj.get("invaded_this_turn")
+            ]
+            if not active_group:
+                continue
+
+            r, c = origin_pos
             adj = get_adjacent_cells(r, c)
             candidates = [
                 pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] != nat
             ]
-            if not candidates or cp["invaded_this_turn"]:
+            if not candidates:
                 continue
-
-            threat_coords = {(t[0], t[1]) for t in threats}
 
             def score_target(pos):
                 tr, tc = pos
@@ -868,13 +993,10 @@ def run_ai_phase4_movement_and_invasion():
                 is_empty = owner is None or len(garrison) == 0
 
                 score = 0
-                # 本拠地接近中の脅威マスは最優先討伐ターゲット
                 if (tr, tc) in threat_coords:
                     score += 500
-                # 他国の本拠地が隣接している場合も最優先で狙う
-                if owner and NATIONS[owner]["home"] == (tr, tc):
+                if owner and owner not in st.session_state.defeated_nations and NATIONS[owner]["home"] == (tr, tc):
                     score += 300
-
                 if is_empty:
                     score += 50
                 if terrain == info["terrain"]:
@@ -889,62 +1011,18 @@ def run_ai_phase4_movement_and_invasion():
                 elif nat == "月面開拓国家ムーンライト":
                     my_pow = sum(
                         calc_unit_effective_power(
-                            u, terrain, info["terrain"], cmd_info
+                            u, terrain, info["terrain"], info["commanders"][c_i]
                         )
-                        for u in cp["units"]
+                        for c_i, c_o in active_group
+                        for u in c_o["units"]
                     )
                     if my_pow >= 450 and not is_empty:
                         score += 55
                 return score + random.randint(0, 15)
 
             tr, tc = max(candidates, key=score_target)
-            defender = st.session_state.owner_grid[tr][tc]
             terrain = st.session_state.terrain_grid[tr][tc]
-            garrison_list = get_garrison_corps(tr, tc, defender)
-            cp["invaded_this_turn"] = True
-
-            if defender is None or len(garrison_list) == 0:
-                st.session_state.owner_grid[tr][tc] = nat
-                cp["pos"] = (tr, tc)
-                label = "中立地域" if defender is None else f"{defender}の無人領地"
-                ai_logs.append(
-                    f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] の{label}を戦闘なしで占領！"
-                )
-                # 本拠地無血占領チェック
-                if defender and NATIONS[defender]["home"] == (tr, tc):
-                    handle_capital_fall(nat, defender)
-            else:
-                atk_power = sum(
-                    calc_unit_effective_power(u, terrain, info["terrain"], cmd_info)
-                    for u in cp["units"]
-                )
-                def_info = NATIONS[defender]
-                def_power = 0
-                for g_idx, g_cp in garrison_list:
-                    g_cmd = def_info["commanders"][g_idx]
-                    def_power += sum(
-                        calc_unit_effective_power(
-                            u, terrain, def_info["terrain"], g_cmd
-                        )
-                        for u in g_cp["units"]
-                    )
-
-                if atk_power >= def_power:
-                    st.session_state.owner_grid[tr][tc] = nat
-                    cp["pos"] = (tr, tc)
-                    for g_idx, g_cp in garrison_list:
-                        reset_corp_to_initial(defender, g_cp, g_idx)
-                    ai_logs.append(
-                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領！"
-                    )
-                    # 本拠地占領チェック
-                    if def_info["home"] == (tr, tc):
-                        handle_capital_fall(nat, defender)
-                else:
-                    reset_corp_to_initial(nat, cp, cp_idx)
-                    ai_logs.append(
-                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（量産型6機へ再編成）。"
-                    )
+            execute_group_invasion(nat, active_group, (tr, tc), terrain, ai_logs)
 
     st.session_state.logs = ai_logs + st.session_state.logs
 
@@ -963,7 +1041,6 @@ if st.session_state.player_nation:
         if st.session_state.owner_grid[r][c] == p_nat
     )
 
-    # 1. ゲームオーバー判定（プレイヤー敗北・本拠地陥落・領地0）
     is_player_defeated = (
         p_nat in st.session_state.defeated_nations
         or st.session_state.owner_grid[p_home[0]][p_home[1]] != p_nat
@@ -989,7 +1066,6 @@ if st.session_state.player_nation:
                 st.rerun()
         st.stop()
 
-    # 2. ゲームクリア判定（プレイヤーが全64領地を制圧）
     if owned_total == 64:
         st.balloons()
         st.success(
@@ -1022,7 +1098,7 @@ if st.session_state.player_nation:
 
 
 # =========================================================
-# フェーズ0：国家選択（各国の風景画像を表示）
+# フェーズ0：国家選択
 # =========================================================
 if st.session_state.phase == 0:
     st.subheader("フェーズ0：担当国家の選択")
@@ -1099,7 +1175,7 @@ elif st.session_state.phase == 1:
 
 
 # =========================================================
-# フェーズ2：魔道機甲生産フェーズ（部隊長表示を開閉式に格納）
+# フェーズ2：魔道機甲生産フェーズ
 # =========================================================
 elif st.session_state.phase == 2:
     p_nat = st.session_state.player_nation
@@ -1111,8 +1187,9 @@ elif st.session_state.phase == 2:
         f"各部隊長の戦力補正を考慮しながら魔道機甲を生産し、**格納庫リスト**へ保管します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
     )
 
-    # 部隊長表示部分を開閉式（st.expander）に変更
-    with st.expander(f"🎖️ {p_nat} 各部隊の隊長・戦力補正一覧（クリックで開閉）", expanded=False):
+    with st.expander(
+        f"🎖️ {p_nat} 各部隊の隊長・戦力補正一覧（クリックで開閉）", expanded=False
+    ):
         cmd_cols = st.columns(4)
         for c_idx, cmd_info in enumerate(p_info["commanders"]):
             corp_no = c_idx + 1
@@ -1209,15 +1286,13 @@ elif st.session_state.phase == 2:
 
 
 # =========================================================
-# フェーズ3：部隊編成フェーズ（開閉式・部隊長戦力補正反映）
+# フェーズ3：部隊編成フェーズ
 # =========================================================
 elif st.session_state.phase == 3:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ3：部隊編成・戦闘配置フェーズ")
-    st.write(
-        "各部隊の隊長が持つ戦力補正に合わせて機体を入れ替え・配置してください。"
-    )
+    st.write("各部隊の隊長が持つ戦力補正に合わせて機体を入れ替え・配置してください。")
 
     user_corps = st.session_state.corps[p_nat]
     hangar_list = st.session_state.hangar[p_nat]
@@ -1326,17 +1401,16 @@ elif st.session_state.phase == 3:
 
 
 # =========================================================
-# フェーズ4：侵攻フェーズ（隊長ミニ portrait・本拠地陥落・討伐アラート）
+# フェーズ4：侵攻フェーズ（同マス未侵攻部隊の一括操作＋個別操作）
 # =========================================================
 elif st.session_state.phase == 4:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ4：侵攻・移動フェーズ")
     st.write(
-        "各部隊ウィンドウを開いて行動を指示してください。本拠地🏰を占領するとその国家は滅亡し、全領地を奪取できます。"
+        "同じマスにいる**侵攻済みでない部隊**をまとめて移動・侵攻できる一括操作ウィンドウと、部隊ごとの個別操作ウィンドウを利用できます。"
     )
 
-    # 自国本拠地への敵接近アラート（全部隊討伐集結推奨）
     player_threats = get_threats_near_home(p_nat)
     if player_threats:
         threat_str = " / ".join(
@@ -1352,7 +1426,7 @@ elif st.session_state.phase == 4:
 
     highlight_coord = user_corps[st.session_state.active_corp_idx]["pos"]
 
-    top_map_col, top_corps_col = st.columns([1.35, 1.15])
+    top_map_col, top_corps_col = st.columns([1.3, 1.2])
     with top_map_col:
         st.markdown("### 🗺️ 現在の戦略マップ（🏰＝本拠地）")
         st.markdown(
@@ -1363,7 +1437,110 @@ elif st.session_state.phase == 4:
         )
 
     with top_corps_col:
-        st.markdown("### 🛡️ 各部隊の作戦ウィンドウ（開閉式）")
+        # 1. 同じマスにいる未侵攻部隊の一括操作ウィンドウ
+        st.markdown("### 👥 同マス未侵攻部隊の一括操作")
+        same_pos_groups = {}
+        for idx, cp in enumerate(user_corps):
+            if cp["units"] and not cp.get("invaded_this_turn"):
+                same_pos_groups.setdefault(cp["pos"], []).append((idx, cp))
+
+        multi_groups = {
+            pos: grp for pos, grp in same_pos_groups.items() if len(grp) >= 2
+        }
+        if multi_groups:
+            for g_idx_num, (g_pos, grp_list) in enumerate(multi_groups.items()):
+                gr, gc = g_pos
+                member_names = "・".join([c_obj["id"] for _, c_obj in grp_list])
+                with st.expander(
+                    f"⚡ 合同操作 ({gr+1},{gc+1}) [{member_names}・{len(grp_list)}部隊]",
+                    expanded=True,
+                ):
+                    adj = get_adjacent_cells(gr, gc)
+                    friendly_adj = [
+                        pos
+                        for pos in adj
+                        if st.session_state.owner_grid[pos[0]][pos[1]] == p_nat
+                    ]
+                    hostile_adj = [
+                        pos
+                        for pos in adj
+                        if st.session_state.owner_grid[pos[0]][pos[1]] != p_nat
+                    ]
+
+                    if friendly_adj:
+                        grp_move = st.selectbox(
+                            "合同移動先（自国領地）",
+                            friendly_adj,
+                            format_func=lambda p: f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}]",
+                            key=f"grp_move_sel_{g_idx_num}_{gr}_{gc}",
+                        )
+                        if st.button(
+                            f"🧭 {member_names} をまとめて移動",
+                            key=f"grp_move_btn_{g_idx_num}_{gr}_{gc}",
+                            use_container_width=True,
+                        ):
+                            for c_i, c_obj in grp_list:
+                                c_obj["pos"] = grp_move
+                            st.session_state.active_corp_idx = grp_list[0][0]
+                            st.session_state.logs.insert(
+                                0,
+                                f"🧭 【自国】{member_names} が ({grp_move[0]+1},{grp_move[1]+1}) へ同時移動しました。",
+                            )
+                            st.rerun()
+
+                    if hostile_adj:
+                        grp_atk_target = st.selectbox(
+                            "合同侵攻先（中立・敵領地）",
+                            hostile_adj,
+                            format_func=lambda p: (
+                                f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - "
+                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰】' if st.session_state.owner_grid[p[0]][p[1]] in NATIONS and NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else '')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
+                            ),
+                            key=f"grp_atk_sel_{g_idx_num}_{gr}_{gc}",
+                        )
+                        if st.button(
+                            f"⚔️ {member_names} で一斉侵攻（侵攻済みにする）",
+                            key=f"grp_atk_btn_{g_idx_num}_{gr}_{gc}",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            tr, tc = grp_atk_target
+                            terrain = st.session_state.terrain_grid[tr][tc]
+                            new_logs = []
+                            b_res = execute_group_invasion(
+                                p_nat, grp_list, (tr, tc), terrain, new_logs
+                            )
+                            st.session_state.logs = new_logs + st.session_state.logs
+                            st.session_state.active_corp_idx = grp_list[0][0]
+                            if b_res["defender"] != "中立" and (
+                                b_res["atk_power"] > 0 or b_res["def_power"] > 0
+                            ):
+                                def_col = (
+                                    NATIONS[b_res["defender"]]["color"]
+                                    if b_res["defender"] in NATIONS
+                                    else "#7f8c8d"
+                                )
+                                st.session_state.battle_data = {
+                                    "player_name": p_nat,
+                                    "player_color": p_info["color"],
+                                    "enemy_name": b_res["defender"],
+                                    "enemy_color": def_col,
+                                    "atk_power": b_res["atk_power"],
+                                    "def_power": b_res["def_power"],
+                                    "won": b_res["won"],
+                                    "player_units": b_res["player_units"],
+                                    "enemy_units": b_res["enemy_units"],
+                                    "target_label": f"({tr+1},{tc+1}) {terrain}",
+                                }
+                            st.rerun()
+        else:
+            st.caption(
+                "現在、同じマスに未侵攻の部隊が2つ以上集結している場所はありません。"
+            )
+
+        st.markdown("---")
+        # 2. 各部隊の個別作戦ウィンドウ
+        st.markdown("### 🛡️ 各部隊の個別作戦ウィンドウ")
         for idx, cp in enumerate(user_corps):
             cur_r, cur_c = cp["pos"]
             cmd_info = p_info["commanders"][idx]
@@ -1372,7 +1549,6 @@ elif st.session_state.phase == 4:
                 f"{cp['id']}（{cmd_info['name']}）｜位置:({cur_r+1},{cur_c+1})｜{inv_status}",
                 expanded=(idx == st.session_state.active_corp_idx),
             ):
-                # 部隊長画像を小さく表示＆戦力補正表示
                 c_img_col, c_desc_col = st.columns([1, 3.2])
                 with c_img_col:
                     cmd_img_path, _ = resolve_commander_image(p_nat, idx + 1)
@@ -1384,16 +1560,15 @@ elif st.session_state.phase == 4:
                     st.markdown(f"**{cmd_info['name']}**（{cmd_info['role']}）")
                     st.caption(f"✨ 戦力補正: {cmd_info['bonus_desc']}")
 
-                if st.button(
-                    "📍 マップでこの部隊の位置をハイライト",
-                    key=f"hl_{idx}",
-                ):
+                if st.button("📍 マップでこの部隊の位置をハイライト", key=f"hl_{idx}"):
                     st.session_state.active_corp_idx = idx
                     st.rerun()
 
                 adj = get_adjacent_cells(cur_r, cur_c)
                 friendly_adj = [
-                    pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] == p_nat
+                    pos
+                    for pos in adj
+                    if st.session_state.owner_grid[pos[0]][pos[1]] == p_nat
                 ]
                 unoccupied_hostile_adj = []
                 garrisoned_enemy_adj = []
@@ -1406,7 +1581,6 @@ elif st.session_state.phase == 4:
                     else:
                         garrisoned_enemy_adj.append(pos)
 
-                # 自領内移動（何度でも可能）
                 if friendly_adj:
                     move_target = st.selectbox(
                         "自国領地内の移動先",
@@ -1429,7 +1603,6 @@ elif st.session_state.phase == 4:
                 else:
                     st.caption("隣接する自国領地はありません。")
 
-                # 侵攻・占領（各部隊ターン1回）
                 if cp.get("invaded_this_turn"):
                     st.warning("🔒 今ターンの侵攻・占領は完了済みです。")
                 else:
@@ -1439,7 +1612,7 @@ elif st.session_state.phase == 4:
                             unoccupied_hostile_adj,
                             format_func=lambda p: (
                                 f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - "
-                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰】' if NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else '（無人領地）')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
+                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰】' if st.session_state.owner_grid[p[0]][p[1]] in NATIONS and NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else '（無人領地）')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
                             ),
                             key=f"neu_sel_{idx}",
                         )
@@ -1449,23 +1622,13 @@ elif st.session_state.phase == 4:
                             use_container_width=True,
                         ):
                             nr, nc = neu_target
-                            prev_owner = st.session_state.owner_grid[nr][nc]
                             t_name = st.session_state.terrain_grid[nr][nc]
-                            st.session_state.owner_grid[nr][nc] = p_nat
-                            cp["pos"] = (nr, nc)
-                            cp["invaded_this_turn"] = True
+                            new_logs = []
+                            execute_group_invasion(
+                                p_nat, [(idx, cp)], (nr, nc), t_name, new_logs
+                            )
+                            st.session_state.logs = new_logs + st.session_state.logs
                             st.session_state.active_corp_idx = idx
-                            target_desc = (
-                                f"{prev_owner}の無人領地"
-                                if prev_owner
-                                else "中立地域"
-                            )
-                            st.session_state.logs.insert(
-                                0,
-                                f"🏳️ 【自国】{cp['id']} が ({nr+1},{nc+1})[{t_name}] の{target_desc}を戦闘なしで占領しました！",
-                            )
-                            if prev_owner and NATIONS[prev_owner]["home"] == (nr, nc):
-                                handle_capital_fall(p_nat, prev_owner)
                             st.rerun()
 
                     if garrisoned_enemy_adj and cp["units"]:
@@ -1486,96 +1649,28 @@ elif st.session_state.phase == 4:
                             use_container_width=True,
                         ):
                             tr, tc = inv_target
-                            defender = st.session_state.owner_grid[tr][tc]
-                            def_info = NATIONS[defender]
                             terrain = st.session_state.terrain_grid[tr][tc]
-
-                            atk_power = sum(
-                                calc_unit_effective_power(
-                                    u, terrain, p_info["terrain"], cmd_info
-                                )
-                                for u in cp["units"]
+                            new_logs = []
+                            b_res = execute_group_invasion(
+                                p_nat, [(idx, cp)], (tr, tc), terrain, new_logs
                             )
-                            garrison_list = get_garrison_corps(tr, tc, defender)
-                            def_units = []
-                            def_power = 0
-                            for g_idx, g_cp in garrison_list:
-                                g_cmd = def_info["commanders"][g_idx]
-                                def_units.extend(g_cp["units"])
-                                def_power += sum(
-                                    calc_unit_effective_power(
-                                        u, terrain, def_info["terrain"], g_cmd
-                                    )
-                                    for u in g_cp["units"]
-                                )
-
-                            won = atk_power >= def_power
-                            cp["invaded_this_turn"] = True
+                            st.session_state.logs = new_logs + st.session_state.logs
                             st.session_state.active_corp_idx = idx
-
-                            unit_visuals = []
-                            for u in cp["units"]:
-                                u_img_path, _ = resolve_machine_image(
-                                    u["chassis_id"],
-                                    u["core_id"],
-                                    u["armor_id"],
-                                    u["weapon_id"],
-                                )
-                                unit_visuals.append(
-                                    {
-                                        "name": u["name"],
-                                        "slot": u.get("slot", "前衛・上"),
-                                        "chassis_id": u["chassis_id"],
-                                        "weapon_id": u["weapon_id"],
-                                        "img_uri": image_to_data_uri(u_img_path),
-                                    }
-                                )
-
-                            enemy_visuals = []
-                            for idx_d, du in enumerate(def_units[:6]):
-                                d_path, _ = resolve_machine_image(
-                                    du["chassis_id"],
-                                    du["core_id"],
-                                    du["armor_id"],
-                                    du["weapon_id"],
-                                )
-                                enemy_visuals.append(
-                                    {
-                                        "name": du["name"],
-                                        "slot": du.get(
-                                            "slot",
-                                            FORMATION_SLOTS[idx_d % len(FORMATION_SLOTS)],
-                                        ),
-                                        "chassis_id": du["chassis_id"],
-                                        "weapon_id": du["weapon_id"],
-                                        "img_uri": image_to_data_uri(d_path),
-                                    }
-                                )
-
-                            if won:
-                                st.session_state.owner_grid[tr][tc] = p_nat
-                                cp["pos"] = (tr, tc)
-                                for g_idx, g_cp in garrison_list:
-                                    reset_corp_to_initial(defender, g_cp, g_idx)
-                                res_msg = f"🏆 【自国】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（敵部隊は量産型6機へ再編成）！"
-                                st.session_state.logs.insert(0, res_msg)
-                                if def_info["home"] == (tr, tc):
-                                    handle_capital_fall(p_nat, defender)
-                            else:
-                                reset_corp_to_initial(p_nat, cp, idx)
-                                res_msg = f"💥 【自国】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（武装無しの量産型6機へ再編成）。"
-                                st.session_state.logs.insert(0, res_msg)
-
+                            def_col = (
+                                NATIONS[b_res["defender"]]["color"]
+                                if b_res["defender"] in NATIONS
+                                else "#7f8c8d"
+                            )
                             st.session_state.battle_data = {
                                 "player_name": p_nat,
                                 "player_color": p_info["color"],
-                                "enemy_name": defender,
-                                "enemy_color": def_info["color"],
-                                "atk_power": atk_power,
-                                "def_power": def_power,
-                                "won": won,
-                                "player_units": unit_visuals,
-                                "enemy_units": enemy_visuals,
+                                "enemy_name": b_res["defender"],
+                                "enemy_color": def_col,
+                                "atk_power": b_res["atk_power"],
+                                "def_power": b_res["def_power"],
+                                "won": b_res["won"],
+                                "player_units": b_res["player_units"],
+                                "enemy_units": b_res["enemy_units"],
                                 "target_label": f"({tr+1},{tc+1}) {terrain}",
                             }
                             st.rerun()
@@ -1815,9 +1910,7 @@ elif st.session_state.phase == 5:
     m_col, r_col = st.columns([2, 1])
     with m_col:
         st.markdown(render_map_html(), unsafe_allow_html=True)
-        st.caption(
-            "※ 🏰: 各国本拠地 / ★隊:自軍 / 🔥⚡🌿🌙隊:敵軍"
-        )
+        st.caption("※ 🏰: 各国本拠地 / ★隊:自軍 / 🔥⚡🌿🌙隊:敵軍")
     with r_col:
         st.markdown("### 📜 今ターンの戦況ログ")
         st.text_area(
