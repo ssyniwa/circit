@@ -498,12 +498,14 @@ def get_threats_near_home(nation_name):
 
 
 def execute_group_invasion(atk_nation, atk_corp_tuples, target_pos, terrain, logs_out):
-    """複数（または単一）の未侵攻部隊を同時侵攻させ、参加部隊を侵攻済みにする"""
+    """複数（または単一）の未侵攻部隊を侵攻させ、参加部隊を侵攻済みにする"""
     atk_info = NATIONS[atk_nation]
     tr, tc = target_pos
     defender = st.session_state.owner_grid[tr][tc]
     garrison_list = get_garrison_corps(tr, tc, defender)
     corp_names = "・".join([cp["id"] for _, cp in atk_corp_tuples])
+    is_multi = len(atk_corp_tuples) >= 2
+    action_label = "合同総攻撃" if is_multi else "侵攻"
 
     for _, cp in atk_corp_tuples:
         cp["invaded_this_turn"] = True
@@ -514,7 +516,7 @@ def execute_group_invasion(atk_nation, atk_corp_tuples, target_pos, terrain, log
             cp["pos"] = (tr, tc)
         label = "中立地域" if defender is None else f"{defender}の無人領地"
         logs_out.append(
-            f"🏳️ {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] の{label}を同時侵攻で占領！"
+            f"🏳️ {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] の{label}を{action_label}で占領！"
         )
         if defender and NATIONS[defender]["home"] == (tr, tc):
             handle_capital_fall(atk_nation, defender)
@@ -587,7 +589,7 @@ def execute_group_invasion(atk_nation, atk_corp_tuples, target_pos, terrain, log
         for g_idx, g_cp in garrison_list:
             reset_corp_to_initial(defender, g_cp, g_idx)
         logs_out.append(
-            f"🏆 {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（戦力 {atk_power} vs {def_power}）！"
+            f"🏆 {atk_info['emoji']} 【{atk_nation}】{corp_names} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を{action_label}で撃破し占領（戦力 {atk_power} vs {def_power}）！"
         )
         if def_info["home"] == (tr, tc):
             handle_capital_fall(atk_nation, defender)
@@ -703,6 +705,22 @@ def get_garrison_corps(r, c, owner_nation):
         for idx, cp in enumerate(st.session_state.corps[owner_nation])
         if cp["pos"] == (r, c) and len(cp["units"]) > 0
     ]
+
+
+def get_adjacent_enemy_capitals(pos, own_nation):
+    """指定座標に隣接している他国の生存中本拠地座標リストを返す"""
+    r, c = pos
+    capitals = []
+    for nr, nc in get_adjacent_cells(r, c):
+        owner = st.session_state.owner_grid[nr][nc]
+        if (
+            owner
+            and owner != own_nation
+            and owner not in st.session_state.defeated_nations
+            and NATIONS[owner]["home"] == (nr, nc)
+        ):
+            capitals.append((nr, nc))
+    return capitals
 
 
 def render_map_html(highlight_pos=None):
@@ -905,7 +923,14 @@ def run_ai_phase4_movement_and_invasion():
                 f"🚨 {info['emoji']} 【AI:{nat}】本拠地周辺に敵接近を感知！全部隊を討伐・迎撃へ急行させます！"
             )
 
-        # まず各部隊を移動させる
+        # 生存中の敵本拠地リスト
+        enemy_capitals = [
+            e_info["home"]
+            for e_nat, e_info in NATIONS.items()
+            if e_nat != nat and e_nat not in st.session_state.defeated_nations
+        ]
+
+        # 1. 各部隊の自領内移動
         for cp_idx, cp in enumerate(st.session_state.corps[nat]):
             cp["invaded_this_turn"] = False
             if not cp["units"]:
@@ -937,6 +962,9 @@ def run_ai_phase4_movement_and_invasion():
                     cp["pos"] = best_move
                     r, c = cp["pos"]
                 else:
+                    # すでに敵本拠地に隣接している場合はその場に留まり集結を待つ
+                    if get_adjacent_enemy_capitals((r, c), nat):
+                        break
                     non_own = [
                         pos
                         for pos in adj
@@ -944,20 +972,33 @@ def run_ai_phase4_movement_and_invasion():
                     ]
                     if non_own or not friendly:
                         break
-                    best_move = max(
-                        friendly,
-                        key=lambda p: len(
+
+                    # 敵本拠地へ近づく自領マスを優先しつつ前線へ移動
+                    def move_score(p):
+                        front_edges = len(
                             [
                                 q
                                 for q in get_adjacent_cells(p[0], p[1])
                                 if st.session_state.owner_grid[q[0]][q[1]] != nat
                             ]
-                        ),
-                    )
+                        )
+                        min_cap_dist = (
+                            min(
+                                abs(p[0] - cr) + abs(p[1] - cc)
+                                for cr, cc in enemy_capitals
+                            )
+                            if enemy_capitals
+                            else 8
+                        )
+                        return front_edges * 10 - min_cap_dist
+
+                    best_move = max(friendly, key=move_score)
                     cp["pos"] = best_move
                     r, c = cp["pos"]
 
-        # 同じマスにいる「侵攻済みでない部隊」をグループ化して同時侵攻
+        # 2. 侵攻フェーズ：
+        #    - 敵本拠地が隣接している（または本拠地防衛討伐時）場合は同マス未侵攻部隊をまとめて「同時侵攻」
+        #    - 通常領地のみ隣接している場合は、複数部隊の同時侵攻は使わず1部隊ずつ個別侵攻する
         pos_groups = {}
         for cp_idx, cp in enumerate(st.session_state.corps[nat]):
             if cp["units"] and not cp.get("invaded_this_turn"):
@@ -966,7 +1007,6 @@ def run_ai_phase4_movement_and_invasion():
         threat_coords = {(t[0], t[1]) for t in threats}
 
         for origin_pos, group_list in pos_groups.items():
-            # 侵攻中にこの国が滅亡していた場合はスキップ
             if nat in st.session_state.defeated_nations:
                 break
             active_group = [
@@ -985,44 +1025,73 @@ def run_ai_phase4_movement_and_invasion():
             if not candidates:
                 continue
 
-            def score_target(pos):
-                tr, tc = pos
-                owner = st.session_state.owner_grid[tr][tc]
-                terrain = st.session_state.terrain_grid[tr][tc]
-                garrison = get_garrison_corps(tr, tc, owner)
-                is_empty = owner is None or len(garrison) == 0
+            adj_capitals = get_adjacent_enemy_capitals(origin_pos, nat)
+            adj_threats = [pos for pos in candidates if pos in threat_coords]
 
-                score = 0
-                if (tr, tc) in threat_coords:
-                    score += 500
-                if owner and owner not in st.session_state.defeated_nations and NATIONS[owner]["home"] == (tr, tc):
-                    score += 300
-                if is_empty:
-                    score += 50
-                if terrain == info["terrain"]:
-                    score += 25
+            # 【基本ルール】複数部隊の同時侵攻は「敵本拠地を攻め落とす場合」（および本拠地防衛の緊急討伐）に発動
+            if adj_capitals:
+                target_cap = adj_capitals[0]
+                terrain = st.session_state.terrain_grid[target_cap[0]][target_cap[1]]
+                execute_group_invasion(nat, active_group, target_cap, terrain, ai_logs)
+                continue
 
-                if nat == "魔導技術国家メイズ" and not is_empty:
-                    score += 45
-                elif nat == "サイバー科学国家システムズ" and is_empty:
-                    score += 60
-                elif nat == "水上自然都市融合国家オアシス" and terrain == "水上自然都市":
-                    score += 70
-                elif nat == "月面開拓国家ムーンライト":
-                    my_pow = sum(
-                        calc_unit_effective_power(
-                            u, terrain, info["terrain"], info["commanders"][c_i]
+            if adj_threats and len(active_group) >= 2:
+                target_th = adj_threats[0]
+                terrain = st.session_state.terrain_grid[target_th[0]][target_th[1]]
+                execute_group_invasion(nat, active_group, target_th, terrain, ai_logs)
+                continue
+
+            # 通常領地への侵攻時は1部隊ずつ個別に侵攻する
+            for single_tuple in active_group:
+                if nat in st.session_state.defeated_nations:
+                    break
+                c_i, c_o = single_tuple
+                if not c_o["units"] or c_o.get("invaded_this_turn"):
+                    continue
+
+                cur_candidates = [
+                    pos
+                    for pos in get_adjacent_cells(c_o["pos"][0], c_o["pos"][1])
+                    if st.session_state.owner_grid[pos[0]][pos[1]] != nat
+                ]
+                if not cur_candidates:
+                    continue
+
+                def score_target(pos):
+                    tr, tc = pos
+                    owner = st.session_state.owner_grid[tr][tc]
+                    terrain = st.session_state.terrain_grid[tr][tc]
+                    garrison = get_garrison_corps(tr, tc, owner)
+                    is_empty = owner is None or len(garrison) == 0
+
+                    score = 0
+                    if (tr, tc) in threat_coords:
+                        score += 500
+                    if is_empty:
+                        score += 50
+                    if terrain == info["terrain"]:
+                        score += 25
+
+                    if nat == "魔導技術国家メイズ" and not is_empty:
+                        score += 45
+                    elif nat == "サイバー科学国家システムズ" and is_empty:
+                        score += 60
+                    elif nat == "水上自然都市融合国家オアシス" and terrain == "水上自然都市":
+                        score += 70
+                    elif nat == "月面開拓国家ムーンライト":
+                        my_pow = sum(
+                            calc_unit_effective_power(
+                                u, terrain, info["terrain"], info["commanders"][c_i]
+                            )
+                            for u in c_o["units"]
                         )
-                        for c_i, c_o in active_group
-                        for u in c_o["units"]
-                    )
-                    if my_pow >= 450 and not is_empty:
-                        score += 55
-                return score + random.randint(0, 15)
+                        if my_pow >= 450 and not is_empty:
+                            score += 55
+                    return score + random.randint(0, 15)
 
-            tr, tc = max(candidates, key=score_target)
-            terrain = st.session_state.terrain_grid[tr][tc]
-            execute_group_invasion(nat, active_group, (tr, tc), terrain, ai_logs)
+                tr, tc = max(cur_candidates, key=score_target)
+                terrain = st.session_state.terrain_grid[tr][tc]
+                execute_group_invasion(nat, [single_tuple], (tr, tc), terrain, ai_logs)
 
     st.session_state.logs = ai_logs + st.session_state.logs
 
@@ -1401,14 +1470,14 @@ elif st.session_state.phase == 3:
 
 
 # =========================================================
-# フェーズ4：侵攻フェーズ（同マス未侵攻部隊の一括操作＋個別操作）
+# フェーズ4：侵攻フェーズ（敵本拠地総攻撃向け・同マス未侵攻部隊一括操作＋個別操作）
 # =========================================================
 elif st.session_state.phase == 4:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ4：侵攻・移動フェーズ")
     st.write(
-        "同じマスにいる**侵攻済みでない部隊**をまとめて移動・侵攻できる一括操作ウィンドウと、部隊ごとの個別操作ウィンドウを利用できます。"
+        "通常領地は各部隊で分散侵攻し、**敵の本拠地🏰を攻め落とす際は同マスに未侵攻部隊を集結させて一斉総攻撃**を行うのが基本戦術です。"
     )
 
     player_threats = get_threats_near_home(p_nat)
@@ -1437,8 +1506,8 @@ elif st.session_state.phase == 4:
         )
 
     with top_corps_col:
-        # 1. 同じマスにいる未侵攻部隊の一括操作ウィンドウ
-        st.markdown("### 👥 同マス未侵攻部隊の一括操作")
+        # 1. 同じマスにいる未侵攻部隊の一括操作ウィンドウ（敵本拠地総攻撃を基本用途として強調）
+        st.markdown("### 👥 同マス未侵攻部隊の一括操作（本拠地総攻撃用）")
         same_pos_groups = {}
         for idx, cp in enumerate(user_corps):
             if cp["units"] and not cp.get("invaded_this_turn"):
@@ -1451,10 +1520,30 @@ elif st.session_state.phase == 4:
             for g_idx_num, (g_pos, grp_list) in enumerate(multi_groups.items()):
                 gr, gc = g_pos
                 member_names = "・".join([c_obj["id"] for _, c_obj in grp_list])
+                adj_capitals = get_adjacent_enemy_capitals(g_pos, p_nat)
+                header_tag = (
+                    "🏰【敵本拠地隣接・総攻撃可能】"
+                    if adj_capitals
+                    else "⚡合同移動・一斉侵攻"
+                )
+
                 with st.expander(
-                    f"⚡ 合同操作 ({gr+1},{gc+1}) [{member_names}・{len(grp_list)}部隊]",
-                    expanded=True,
+                    f"{header_tag} ({gr+1},{gc+1}) [{member_names}・{len(grp_list)}部隊]",
+                    expanded=bool(adj_capitals),
                 ):
+                    if adj_capitals:
+                        cap_labels = [
+                            f"{st.session_state.owner_grid[cr][cc]} 本拠地 ({cr+1},{cc+1})"
+                            for cr, cc in adj_capitals
+                        ]
+                        st.warning(
+                            f"🎯 敵本拠地（{', '.join(cap_labels)}）に隣接中！複数部隊の同時侵攻で一気に攻め落とせます。"
+                        )
+                    else:
+                        st.caption(
+                            "※ 複数部隊の同時侵攻は敵本拠地攻略が基本です（通常領地は個別侵攻による分散拡大が有効です）。"
+                        )
+
                     adj = get_adjacent_cells(gr, gc)
                     friendly_adj = [
                         pos
@@ -1467,9 +1556,15 @@ elif st.session_state.phase == 4:
                         if st.session_state.owner_grid[pos[0]][pos[1]] != p_nat
                     ]
 
+                    # 敵本拠地が隣接している場合は本拠地を先頭に並べ替え
+                    hostile_adj_sorted = sorted(
+                        hostile_adj,
+                        key=lambda p: 0 if p in adj_capitals else 1,
+                    )
+
                     if friendly_adj:
                         grp_move = st.selectbox(
-                            "合同移動先（自国領地）",
+                            "合同移動先（自国領地・本拠地前への集結移動）",
                             friendly_adj,
                             format_func=lambda p: f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}]",
                             key=f"grp_move_sel_{g_idx_num}_{gr}_{gc}",
@@ -1488,18 +1583,23 @@ elif st.session_state.phase == 4:
                             )
                             st.rerun()
 
-                    if hostile_adj:
+                    if hostile_adj_sorted:
                         grp_atk_target = st.selectbox(
-                            "合同侵攻先（中立・敵領地）",
-                            hostile_adj,
+                            "合同侵攻先（基本：敵本拠地🏰の攻略）",
+                            hostile_adj_sorted,
                             format_func=lambda p: (
                                 f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - "
-                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰】' if st.session_state.owner_grid[p[0]][p[1]] in NATIONS and NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else '')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
+                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰・総攻撃推奨】' if p in adj_capitals else '（通常領地）')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域（通常領地）'}"
                             ),
                             key=f"grp_atk_sel_{g_idx_num}_{gr}_{gc}",
                         )
+                        btn_text = (
+                            f"🏰⚔️ {member_names} で敵本拠地へ一斉総攻撃！"
+                            if grp_atk_target in adj_capitals
+                            else f"⚔️ {member_names} で同時侵攻（全参加部隊が侵攻済みになります）"
+                        )
                         if st.button(
-                            f"⚔️ {member_names} で一斉侵攻（侵攻済みにする）",
+                            btn_text,
                             key=f"grp_atk_btn_{g_idx_num}_{gr}_{gc}",
                             type="primary",
                             use_container_width=True,
@@ -1535,7 +1635,7 @@ elif st.session_state.phase == 4:
                             st.rerun()
         else:
             st.caption(
-                "現在、同じマスに未侵攻の部隊が2つ以上集結している場所はありません。"
+                "現在、同じマスに未侵攻の部隊が2つ以上集結している場所はありません（敵本拠地の隣マスへ複数部隊を集結させると総攻撃ウィンドウが開きます）。"
             )
 
         st.markdown("---")
