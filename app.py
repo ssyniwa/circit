@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# 1. 国家データベース（各部隊の隊長情報・戦略タイプ追加）
+# 1. 国家データベース（各部隊の隊長情報・固有戦力補正を追加）
 NATIONS = {
     "魔導技術国家メイズ": {
         "id": "maze",
@@ -23,10 +23,34 @@ NATIONS = {
         "strategy": "重装甲・正面突破型（軍備生産を最優先し、前衛重視で敵駐留地へ積極侵攻）",
         "desc": "荒れ地に君臨する魔導帝国。古龍の魔力を動力源とし、重装甲機による正面突破を得意とする。",
         "commanders": [
-            {"name": "ヴァルカン・ブレイズ", "role": "第1部隊長 / 紅蓮突撃"},
-            {"name": "イグニス・クロウ", "role": "第2部隊長 / 破城重装"},
-            {"name": "アッシュ・ヴォルト", "role": "第3部隊長 / 荒野強襲"},
-            {"name": "ルビー・フレイム", "role": "第4部隊長 / 魔導砲撃"},
+            {
+                "name": "ヴァルカン・ブレイズ",
+                "role": "第1部隊長 / 紅蓮突撃",
+                "bonus_type": "front",
+                "bonus_val": 25,
+                "bonus_desc": "前衛配置機体の戦力 +25",
+            },
+            {
+                "name": "イグニス・クロウ",
+                "role": "第2部隊長 / 破城重装",
+                "bonus_type": "heavy",
+                "bonus_val": 30,
+                "bonus_desc": "重装甲アーマーの戦力 +30",
+            },
+            {
+                "name": "アッシュ・ヴォルト",
+                "role": "第3部隊長 / 荒野強襲",
+                "bonus_type": "all",
+                "bonus_val": 12,
+                "bonus_desc": "部隊全機の戦力 +12",
+            },
+            {
+                "name": "ルビー・フレイム",
+                "role": "第4部隊長 / 魔導砲撃",
+                "bonus_type": "rear",
+                "bonus_val": 25,
+                "bonus_desc": "後衛配置機体の戦力 +25",
+            },
         ],
     },
     "サイバー科学国家システムズ": {
@@ -39,10 +63,34 @@ NATIONS = {
         "strategy": "経済重視・電撃拡張型（産業投資を最優先し、高速機で無人・中立領地を急速拡大）",
         "desc": "高度に発達した科学都市国家。圧倒的な経済力と高速機動戦術で版図を広げる。",
         "commanders": [
-            {"name": "ゼクス・コーダ", "role": "第1部隊長 / 電撃機動"},
-            {"name": "シエル・パルス", "role": "第2部隊長 / 電子戦術"},
-            {"name": "レイ・ボルテックス", "role": "第3部隊長 / 領域制圧"},
-            {"name": "ノヴァ・リンク", "role": "第4部隊長 / 広域偵察"},
+            {
+                "name": "ゼクス・コーダ",
+                "role": "第1部隊長 / 電撃機動",
+                "bonus_type": "hover",
+                "bonus_val": 30,
+                "bonus_desc": "ホバリングバイクの戦力 +30",
+            },
+            {
+                "name": "シエル・パルス",
+                "role": "第2部隊長 / 電子戦術",
+                "bonus_type": "all",
+                "bonus_val": 15,
+                "bonus_desc": "部隊全機の戦力 +15",
+            },
+            {
+                "name": "レイ・ボルテックス",
+                "role": "第3部隊長 / 領域制圧",
+                "bonus_type": "front",
+                "bonus_val": 20,
+                "bonus_desc": "前衛配置機体の戦力 +20",
+            },
+            {
+                "name": "ノヴァ・リンク",
+                "role": "第4部隊長 / 広域偵察",
+                "bonus_type": "wing",
+                "bonus_val": 30,
+                "bonus_desc": "ステルス・ウィングの戦力 +30",
+            },
         ],
     },
     "水上自然都市融合国家オアシス": {
@@ -55,10 +103,34 @@ NATIONS = {
         "strategy": "バランス・領域防衛型（産業と軍備を均等に育て、得意地形と防衛線を堅実に維持）",
         "desc": "自然と調和する水上都市国家。環境エーテルを利用した安定した戦線維持に長ける。",
         "commanders": [
-            {"name": "リリア・ウェーブ", "role": "第1部隊長 / 水路防衛"},
-            {"name": "シルフ・リーフ", "role": "第2部隊長 / 環境機動"},
-            {"name": "コーラル・ミスト", "role": "第3部隊長 / 拠点護衛"},
-            {"name": "ナギ・ストリーム", "role": "第4部隊長 / 遊撃支援"},
+            {
+                "name": "リリア・ウェーブ",
+                "role": "第1部隊長 / 水路防衛",
+                "bonus_type": "home_terrain",
+                "bonus_val": 30,
+                "bonus_desc": "得意地形での戦力 +30",
+            },
+            {
+                "name": "シルフ・リーフ",
+                "role": "第2部隊長 / 環境機動",
+                "bonus_type": "buggy",
+                "bonus_val": 25,
+                "bonus_desc": "万能バギーの戦力 +25",
+            },
+            {
+                "name": "コーラル・ミスト",
+                "role": "第3部隊長 / 拠点護衛",
+                "bonus_type": "all",
+                "bonus_val": 14,
+                "bonus_desc": "部隊全機の戦力 +14",
+            },
+            {
+                "name": "ナギ・ストリーム",
+                "role": "第4部隊長 / 遊撃支援",
+                "bonus_type": "rear",
+                "bonus_val": 22,
+                "bonus_desc": "後衛配置機体の戦力 +22",
+            },
         ],
     },
     "月面開拓国家ムーンライト": {
@@ -71,10 +143,34 @@ NATIONS = {
         "strategy": "少数精鋭・長距離砲撃型（高コスト精鋭機を後衛主体で編成し、高火力砲撃で敵軍を粉砕）",
         "desc": "月面クレーターに築かれた開拓国家。未知の真空エネルギー機関による高火力砲撃戦を繰り広げる。",
         "commanders": [
-            {"name": "ルナ・クレーター", "role": "第1部隊長 / 軌道狙撃"},
-            {"name": "セレス・エクリプス", "role": "第2部隊長 / 精鋭奇襲"},
-            {"name": "アーク・コスモス", "role": "第3部隊長 / 真空砲撃"},
-            {"name": "ステラ・オービット", "role": "第4部隊長 / 前線統制"},
+            {
+                "name": "ルナ・クレーター",
+                "role": "第1部隊長 / 軌道狙撃",
+                "bonus_type": "rear",
+                "bonus_val": 35,
+                "bonus_desc": "後衛配置機体の戦力 +35",
+            },
+            {
+                "name": "セレス・エクリプス",
+                "role": "第2部隊長 / 精鋭奇襲",
+                "bonus_type": "wing",
+                "bonus_val": 30,
+                "bonus_desc": "ステルス・ウィングの戦力 +30",
+            },
+            {
+                "name": "アーク・コスモス",
+                "role": "第3部隊長 / 真空砲撃",
+                "bonus_type": "cannon",
+                "bonus_val": 35,
+                "bonus_desc": "プラズマ・キャノン搭載機の戦力 +35",
+            },
+            {
+                "name": "ステラ・オービット",
+                "role": "第4部隊長 / 前線統制",
+                "bonus_type": "all",
+                "bonus_val": 16,
+                "bonus_desc": "部隊全機の戦力 +16",
+            },
         ],
     },
 }
@@ -207,7 +303,6 @@ def _find_image_by_stem(stem):
 
 
 def resolve_nation_landscape_image(nation_name):
-    """国家風景画像（image/nation_<id>.png 等）を取得"""
     nat_id = NATIONS[nation_name]["id"]
     path = _find_image_by_stem(f"nation_{nat_id}")
     if path:
@@ -216,7 +311,6 @@ def resolve_nation_landscape_image(nation_name):
 
 
 def resolve_commander_image(nation_name, corp_no):
-    """各部隊の隊長画像（image/commander_<id>_corp<1..4>.png 等）を取得"""
     nat_id = NATIONS[nation_name]["id"]
     path = _find_image_by_stem(f"commander_{nat_id}_corp{corp_no}")
     if path:
@@ -264,7 +358,8 @@ def calc_machine_stats(chassis_name, core_name, armor_name, weapon_name):
     }
 
 
-def calc_unit_effective_power(unit, terrain, nation_terrain):
+def calc_unit_effective_power(unit, terrain, nation_terrain, commander=None):
+    """機体パーツ・陣形・地形・部隊長の固有戦力補正を加味した実戦戦力を計算"""
     p = unit["power"]
     slot = unit.get("slot", "前衛・上")
     is_front = slot.startswith("前衛")
@@ -286,6 +381,23 @@ def calc_unit_effective_power(unit, terrain, nation_terrain):
 
     if terrain == nation_terrain and unit["chassis_id"] != "buggy":
         p += 25
+
+    # 部隊長による戦力補正
+    if commander:
+        b_type = commander.get("bonus_type")
+        b_val = commander.get("bonus_val", 0)
+        if b_type == "all":
+            p += b_val
+        elif b_type == "front" and is_front:
+            p += b_val
+        elif b_type == "rear" and is_rear:
+            p += b_val
+        elif b_type in ("heavy", "hover", "buggy", "wing") and unit["chassis_id"] == b_type:
+            p += b_val
+        elif b_type == "cannon" and unit["weapon_id"] == "cannon":
+            p += b_val
+        elif b_type == "home_terrain" and terrain == nation_terrain:
+            p += b_val
 
     return p
 
@@ -347,6 +459,46 @@ def reset_corp_to_initial(nation_name, corp, corp_idx):
     corp["units"] = [create_mass_unit(nation_name, corp_idx, s_i) for s_i in range(6)]
 
 
+def handle_capital_fall(conqueror_nation, fallen_nation):
+    """本拠地陥落時の処理：防衛側の敗北確定＆防衛側の全領地を侵攻側へ移譲"""
+    transferred = 0
+    for r in range(8):
+        for c in range(8):
+            if st.session_state.owner_grid[r][c] == fallen_nation:
+                st.session_state.owner_grid[r][c] = conqueror_nation
+                transferred += 1
+
+    # 敗北国の部隊を撤収
+    for cp in st.session_state.corps[fallen_nation]:
+        cp["units"] = []
+
+    if fallen_nation not in st.session_state.defeated_nations:
+        st.session_state.defeated_nations.append(fallen_nation)
+
+    c_emoji = NATIONS[conqueror_nation]["emoji"]
+    f_emoji = NATIONS[fallen_nation]["emoji"]
+    st.session_state.logs.insert(
+        0,
+        f"👑 【本拠地陥落】{c_emoji} {conqueror_nation} が {f_emoji} {fallen_nation} の本拠地を占領！{fallen_nation} は敗北し、全 {transferred} 領地が {conqueror_nation} に併合されました！",
+    )
+
+
+def get_threats_near_home(nation_name):
+    """自国本拠地（マンハッタン距離2以内）に接近している他国部隊の座標リストを返す"""
+    hr, hc = NATIONS[nation_name]["home"]
+    threats = []
+    for other_nat, corp_list in st.session_state.corps.items():
+        if other_nat == nation_name:
+            continue
+        for cp in corp_list:
+            if not cp["units"]:
+                continue
+            er, ec = cp["pos"]
+            if abs(er - hr) + abs(ec - hc) <= 2:
+                threats.append((er, ec, other_nat, cp["id"]))
+    return threats
+
+
 def init_world(player_nation=None):
     terrain_grid = []
     owner_grid = []
@@ -395,6 +547,7 @@ def init_world(player_nation=None):
     st.session_state.industry_lv = industry_lv
     st.session_state.hangar = hangar
     st.session_state.corps = corps
+    st.session_state.defeated_nations = []
     st.session_state.battle_data = None
     st.session_state.logs = [
         "=== ワールドマップを生成しました（全4部隊に6機の量産型機体を配備済み） ==="
@@ -403,6 +556,8 @@ def init_world(player_nation=None):
 
 if "phase" not in st.session_state:
     init_world(None)
+if "defeated_nations" not in st.session_state:
+    st.session_state.defeated_nations = []
 
 
 def get_income(nation_name):
@@ -454,6 +609,11 @@ def render_map_html(highlight_pos=None):
         "水上自然都市": "水上",
         "月面都市": "月面",
     }
+    home_coords = {
+        info["home"]: n_name
+        for n_name, info in NATIONS.items()
+        if n_name not in st.session_state.defeated_nations
+    }
     p_nat = st.session_state.player_nation
     rows_html = []
     for r in range(8):
@@ -467,6 +627,8 @@ def render_map_html(highlight_pos=None):
             player_badges = []
             enemy_badges = []
             for n_name, info in NATIONS.items():
+                if n_name in st.session_state.defeated_nations:
+                    continue
                 for idx, cp in enumerate(st.session_state.corps[n_name]):
                     if cp["pos"] == (r, c) and cp["units"]:
                         if n_name == p_nat:
@@ -485,6 +647,9 @@ def render_map_html(highlight_pos=None):
                 o_icon = "🏳️"
                 border_style = "1px solid #1f242d"
                 owner_tag = "中立"
+
+            if (r, c) in home_coords:
+                owner_tag += "🏰"
 
             if highlight_pos == (r, c):
                 border_style = "3px solid #f1c40f"
@@ -524,7 +689,7 @@ def render_map_html(highlight_pos=None):
 def run_ai_phase1_economy():
     p_nat = st.session_state.player_nation
     for nat, info in NATIONS.items():
-        if nat == p_nat:
+        if nat == p_nat or nat in st.session_state.defeated_nations:
             continue
         inc = get_income(nat)
         add_funds(nat, inc)
@@ -551,7 +716,7 @@ def run_ai_phase1_economy():
 def run_ai_phase2_production():
     p_nat = st.session_state.player_nation
     for nat, info in NATIONS.items():
-        if nat == p_nat:
+        if nat == p_nat or nat in st.session_state.defeated_nations:
             continue
         core_name = info["core"]
 
@@ -598,7 +763,7 @@ def run_ai_phase2_production():
 def run_ai_phase3_formation():
     p_nat = st.session_state.player_nation
     for nat, info in NATIONS.items():
-        if nat == p_nat:
+        if nat == p_nat or nat in st.session_state.defeated_nations:
             continue
         hangar_units = st.session_state.hangar[nat]
         if not hangar_units:
@@ -621,8 +786,16 @@ def run_ai_phase4_movement_and_invasion():
     p_nat = st.session_state.player_nation
     ai_logs = []
     for nat, info in NATIONS.items():
-        if nat == p_nat:
+        if nat == p_nat or nat in st.session_state.defeated_nations:
             continue
+
+        # 本拠地接近中の敵部隊をチェック（緊急防衛・討伐モード）
+        threats = get_threats_near_home(nat)
+        if threats:
+            ai_logs.append(
+                f"🚨 {info['emoji']} 【AI:{nat}】本拠地周辺に敵接近を感知！全部隊を討伐・迎撃へ急行させます！"
+            )
+
         for cp_idx, cp in enumerate(st.session_state.corps[nat]):
             cp["invaded_this_turn"] = False
             if not cp["units"]:
@@ -632,35 +805,60 @@ def run_ai_phase4_movement_and_invasion():
                 cp["pos"] = info["home"]
                 r, c = cp["pos"]
 
-            for _step in range(2):
+            cmd_info = info["commanders"][cp_idx]
+
+            # 1. 自領内移動（脅威がある場合は脅威座標へ最短接近、通常時は前線へ移動）
+            for _step in range(3 if threats else 2):
                 adj = get_adjacent_cells(r, c)
-                non_own = [
-                    pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] != nat
-                ]
                 friendly = [
                     pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] == nat
                 ]
-                if non_own or not friendly:
-                    break
-                best_move = max(
-                    friendly,
-                    key=lambda p: len(
-                        [
-                            q
-                            for q in get_adjacent_cells(p[0], p[1])
-                            if st.session_state.owner_grid[q[0]][q[1]] != nat
-                        ]
-                    ),
-                )
-                cp["pos"] = best_move
-                r, c = cp["pos"]
+                if threats:
+                    # 脅威と隣接していれば移動完了
+                    threat_coords = {(t[0], t[1]) for t in threats}
+                    if any(pos in threat_coords for pos in adj):
+                        break
+                    if not friendly:
+                        break
+                    # 最も近い脅威へ近づく自領マスへ移動
+                    best_move = min(
+                        friendly,
+                        key=lambda p: min(
+                            abs(p[0] - tr) + abs(p[1] - tc) for tr, tc in threat_coords
+                        ),
+                    )
+                    cp["pos"] = best_move
+                    r, c = cp["pos"]
+                else:
+                    non_own = [
+                        pos
+                        for pos in adj
+                        if st.session_state.owner_grid[pos[0]][pos[1]] != nat
+                    ]
+                    if non_own or not friendly:
+                        break
+                    best_move = max(
+                        friendly,
+                        key=lambda p: len(
+                            [
+                                q
+                                for q in get_adjacent_cells(p[0], p[1])
+                                if st.session_state.owner_grid[q[0]][q[1]] != nat
+                            ]
+                        ),
+                    )
+                    cp["pos"] = best_move
+                    r, c = cp["pos"]
 
+            # 2. 侵攻・討伐行動（各部隊ターン1回）
             adj = get_adjacent_cells(r, c)
             candidates = [
                 pos for pos in adj if st.session_state.owner_grid[pos[0]][pos[1]] != nat
             ]
             if not candidates or cp["invaded_this_turn"]:
                 continue
+
+            threat_coords = {(t[0], t[1]) for t in threats}
 
             def score_target(pos):
                 tr, tc = pos
@@ -670,6 +868,13 @@ def run_ai_phase4_movement_and_invasion():
                 is_empty = owner is None or len(garrison) == 0
 
                 score = 0
+                # 本拠地接近中の脅威マスは最優先討伐ターゲット
+                if (tr, tc) in threat_coords:
+                    score += 500
+                # 他国の本拠地が隣接している場合も最優先で狙う
+                if owner and NATIONS[owner]["home"] == (tr, tc):
+                    score += 300
+
                 if is_empty:
                     score += 50
                 if terrain == info["terrain"]:
@@ -683,7 +888,9 @@ def run_ai_phase4_movement_and_invasion():
                     score += 70
                 elif nat == "月面開拓国家ムーンライト":
                     my_pow = sum(
-                        calc_unit_effective_power(u, terrain, info["terrain"])
+                        calc_unit_effective_power(
+                            u, terrain, info["terrain"], cmd_info
+                        )
                         for u in cp["units"]
                     )
                     if my_pow >= 450 and not is_empty:
@@ -703,25 +910,36 @@ def run_ai_phase4_movement_and_invasion():
                 ai_logs.append(
                     f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] の{label}を戦闘なしで占領！"
                 )
+                # 本拠地無血占領チェック
+                if defender and NATIONS[defender]["home"] == (tr, tc):
+                    handle_capital_fall(nat, defender)
             else:
                 atk_power = sum(
-                    calc_unit_effective_power(u, terrain, info["terrain"])
+                    calc_unit_effective_power(u, terrain, info["terrain"], cmd_info)
                     for u in cp["units"]
                 )
                 def_info = NATIONS[defender]
-                def_units = [u for _, g_cp in garrison_list for u in g_cp["units"]]
-                def_power = sum(
-                    calc_unit_effective_power(u, terrain, def_info["terrain"])
-                    for u in def_units
-                )
+                def_power = 0
+                for g_idx, g_cp in garrison_list:
+                    g_cmd = def_info["commanders"][g_idx]
+                    def_power += sum(
+                        calc_unit_effective_power(
+                            u, terrain, def_info["terrain"], g_cmd
+                        )
+                        for u in g_cp["units"]
+                    )
+
                 if atk_power >= def_power:
                     st.session_state.owner_grid[tr][tc] = nat
                     cp["pos"] = (tr, tc)
                     for g_idx, g_cp in garrison_list:
                         reset_corp_to_initial(defender, g_cp, g_idx)
                     ai_logs.append(
-                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（敗北部隊は量産型6機へ再編成）！"
+                        f"{info['emoji']} 【AI:{nat}】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領！"
                     )
+                    # 本拠地占領チェック
+                    if def_info["home"] == (tr, tc):
+                        handle_capital_fall(nat, defender)
                 else:
                     reset_corp_to_initial(nat, cp, cp_idx)
                     ai_logs.append(
@@ -731,26 +949,63 @@ def run_ai_phase4_movement_and_invasion():
     st.session_state.logs = ai_logs + st.session_state.logs
 
 
-# --- ヘッダー＆全領地支配チェック ---
+# --- ヘッダー＆クリア／ゲームオーバー判定 ---
 st.title("⚔️ エーテル・ウォー：4大国魔導機甲戦記")
 
 if st.session_state.player_nation:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
+    p_home = p_info["home"]
     owned_total = sum(
         1
         for r in range(8)
         for c in range(8)
         if st.session_state.owner_grid[r][c] == p_nat
     )
+
+    # 1. ゲームオーバー判定（プレイヤー敗北・本拠地陥落・領地0）
+    is_player_defeated = (
+        p_nat in st.session_state.defeated_nations
+        or st.session_state.owner_grid[p_home[0]][p_home[1]] != p_nat
+        or owned_total == 0
+    )
+    if is_player_defeated:
+        st.error("💀 GAME OVER — 担当国家の本拠地が陥落し、敗北しました…")
+        with st.container(border=True):
+            st.markdown(f"### {p_info['emoji']} {p_nat} 滅亡記録")
+            st.write(f"- **到達ターン:** 第 {st.session_state.turn} ターン")
+            st.write(
+                f"- **陥落した本拠地:** ({p_home[0]+1}, {p_home[1]+1}) {p_info['terrain']}"
+            )
+            st.markdown("#### 📜 直近の戦況ログ")
+            st.text_area(
+                "敗北ログ",
+                "\n".join(st.session_state.logs[:12]),
+                height=220,
+                label_visibility="collapsed",
+            )
+            if st.button("🔄 タイトルへ戻って再挑戦する", type="primary"):
+                init_world(None)
+                st.rerun()
+        st.stop()
+
+    # 2. ゲームクリア判定（プレイヤーが全64領地を制圧）
     if owned_total == 64:
         st.balloons()
         st.success(
-            f"🏆 祝・全64領地完全支配！ 第 {st.session_state.turn} ターンにて **{p_nat}** が世界を統一しました！"
+            f"🏆 GAME CLEAR — 全64領地完全制覇！ 第 {st.session_state.turn} ターンにて **{p_nat}** が大陸を統一しました！"
         )
-        if st.button("最初から新しく始める"):
-            init_world(None)
-            st.rerun()
+        with st.container(border=True):
+            land_path, _ = resolve_nation_landscape_image(p_nat)
+            if land_path:
+                st.image(land_path, caption=f"統一国家：{p_nat}", use_container_width=True)
+            st.markdown(f"### 👑 覇者：{p_info['emoji']} {p_nat}")
+            st.write(f"- **統一達成ターン:** 第 {st.session_state.turn} ターン")
+            st.write(f"- **最終所持資金:** {st.session_state.funds.get(p_nat, 0)} G")
+            st.write(f"- **最終産業レベル:** Lv.{st.session_state.industry_lv.get(p_nat, 1)}")
+            if st.button("🔄 新しい国家で最初からプレイする", type="primary"):
+                init_world(None)
+                st.rerun()
         st.stop()
 
     current_funds = st.session_state.funds.get(p_nat, 0)
@@ -772,7 +1027,7 @@ if st.session_state.player_nation:
 if st.session_state.phase == 0:
     st.subheader("フェーズ0：担当国家の選択")
     st.write(
-        "4つの国家の風景・固有動力コア・AI戦略傾向を確認し、運営する国家を選択してください（`image/nation_<id>.png` を配置すると風景が表示されます）。"
+        "4つの国家の風景・固有動力コア・AI戦略傾向を確認し、運営する国家を選択してください。"
     )
 
     cols = st.columns(2)
@@ -813,7 +1068,7 @@ elif st.session_state.phase == 1:
     p_nat = st.session_state.player_nation
     st.subheader("フェーズ1：資金調達フェーズ")
     st.write(
-        "担当国家の産業を活性化し、毎ターンの獲得資金を増やしましょう。他3国もそれぞれの国家戦略に沿って経済運営を行います。"
+        "担当国家の産業を活性化し、毎ターンの獲得資金を増やしましょう。他国もそれぞれの国家戦略に沿って経済運営を行います。"
     )
 
     c1, c2 = st.columns([1, 1])
@@ -844,7 +1099,7 @@ elif st.session_state.phase == 1:
 
 
 # =========================================================
-# フェーズ2：魔道機甲生産フェーズ（各部隊の隊長画像を表示）
+# フェーズ2：魔道機甲生産フェーズ（部隊長表示を開閉式に格納）
 # =========================================================
 elif st.session_state.phase == 2:
     p_nat = st.session_state.player_nation
@@ -853,29 +1108,30 @@ elif st.session_state.phase == 2:
 
     st.subheader("フェーズ2：魔道機甲生産フェーズ")
     st.write(
-        f"各部隊の隊長を確認しながら魔道機甲を生産し、**格納庫リスト**へ保管します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
+        f"各部隊長の戦力補正を考慮しながら魔道機甲を生産し、**格納庫リスト**へ保管します。動力コアは **{p_nat}** 固有の「**{locked_core}**」に限定されています。"
     )
 
-    # 自国4部隊の隊長一覧表示
-    st.markdown(f"#### 🎖️ {p_nat} 各部隊の隊長（全4名）")
-    cmd_cols = st.columns(4)
-    for c_idx, cmd_info in enumerate(p_info["commanders"]):
-        corp_no = c_idx + 1
-        cmd_img_path, cmd_tag = resolve_commander_image(p_nat, corp_no)
-        with cmd_cols[c_idx]:
-            with st.container(border=True):
-                if cmd_img_path:
-                    st.image(
-                        cmd_img_path,
-                        caption=f"第{corp_no}部隊長 [{cmd_tag}]",
-                        use_container_width=True,
-                    )
-                else:
-                    st.caption(
-                        f"👤 隊長画像未配置:\n`image/commander_{p_info['id']}_corp{corp_no}.png`"
-                    )
-                st.markdown(f"**{cmd_info['name']}**")
-                st.caption(cmd_info["role"])
+    # 部隊長表示部分を開閉式（st.expander）に変更
+    with st.expander(f"🎖️ {p_nat} 各部隊の隊長・戦力補正一覧（クリックで開閉）", expanded=False):
+        cmd_cols = st.columns(4)
+        for c_idx, cmd_info in enumerate(p_info["commanders"]):
+            corp_no = c_idx + 1
+            cmd_img_path, cmd_tag = resolve_commander_image(p_nat, corp_no)
+            with cmd_cols[c_idx]:
+                with st.container(border=True):
+                    if cmd_img_path:
+                        st.image(
+                            cmd_img_path,
+                            caption=f"第{corp_no}部隊長",
+                            use_container_width=True,
+                        )
+                    else:
+                        st.caption(
+                            f"👤 未配置:\n`commander_{p_info['id']}_corp{corp_no}.png`"
+                        )
+                    st.markdown(f"**{cmd_info['name']}**")
+                    st.caption(cmd_info["role"])
+                    st.info(f"✨ {cmd_info['bonus_desc']}")
 
     st.markdown("---")
     col_p1, col_p2 = st.columns(2)
@@ -951,15 +1207,16 @@ elif st.session_state.phase == 2:
         st.session_state.phase = 3
         st.rerun()
 
+
 # =========================================================
-# フェーズ3：部隊編成フェーズ（開閉式・格納庫リストとの交換形態）
+# フェーズ3：部隊編成フェーズ（開閉式・部隊長戦力補正反映）
 # =========================================================
 elif st.session_state.phase == 3:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ3：部隊編成・戦闘配置フェーズ")
     st.write(
-        "初期状態では全国家・全4部隊に**6機の武装無し量産型機体**が配備されています。各部隊ウィンドウを開き、**格納庫リスト**から選択した機体と入れ替え・配置変更を行ってください。"
+        "各部隊の隊長が持つ戦力補正に合わせて機体を入れ替え・配置してください。"
     )
 
     user_corps = st.session_state.corps[p_nat]
@@ -970,8 +1227,9 @@ elif st.session_state.phase == 3:
     )
 
     for idx, cp in enumerate(user_corps):
+        cmd_info = p_info["commanders"][idx]
         with st.expander(
-            f"🛡️ {cp['id']}（配置:{len(cp['units'])}/6機 / 位置:({cp['pos'][0]+1},{cp['pos'][1]+1})）",
+            f"🛡️ {cp['id']}（隊長:{cmd_info['name']}／{cmd_info['bonus_desc']}）",
             expanded=(idx == 0),
         ):
             slot_map = {u.get("slot"): u for u in cp["units"]}
@@ -982,7 +1240,7 @@ elif st.session_state.phase == 3:
                     occupant = slot_map.get(s_name)
                     if occupant:
                         eff_p = calc_unit_effective_power(
-                            occupant, p_info["terrain"], p_info["terrain"]
+                            occupant, p_info["terrain"], p_info["terrain"], cmd_info
                         )
                         st.success(
                             f"**{s_name}**: 🤖 {occupant['name']} (実戦力:{eff_p} / {occupant['weapon'][:4]})"
@@ -995,7 +1253,7 @@ elif st.session_state.phase == 3:
                     occupant = slot_map.get(s_name)
                     if occupant:
                         eff_p = calc_unit_effective_power(
-                            occupant, p_info["terrain"], p_info["terrain"]
+                            occupant, p_info["terrain"], p_info["terrain"], cmd_info
                         )
                         st.warning(
                             f"**{s_name}**: 🤖 {occupant['name']} (実戦力:{eff_p} / {occupant['weapon'][:4]})"
@@ -1068,15 +1326,25 @@ elif st.session_state.phase == 3:
 
 
 # =========================================================
-# フェーズ4：侵攻フェーズ（開閉式部隊ウィンドウ・敗北時量産6機リセット）
+# フェーズ4：侵攻フェーズ（隊長ミニ portrait・本拠地陥落・討伐アラート）
 # =========================================================
 elif st.session_state.phase == 4:
     p_nat = st.session_state.player_nation
     p_info = NATIONS[p_nat]
     st.subheader("フェーズ4：侵攻・移動フェーズ")
     st.write(
-        "各部隊ウィンドウを開いて行動を指示してください。敗北した部隊は本拠地へ撤退し、**武装無しの量産型機体6機の初期状態**に戻ります。"
+        "各部隊ウィンドウを開いて行動を指示してください。本拠地🏰を占領するとその国家は滅亡し、全領地を奪取できます。"
     )
+
+    # 自国本拠地への敵接近アラート（全部隊討伐集結推奨）
+    player_threats = get_threats_near_home(p_nat)
+    if player_threats:
+        threat_str = " / ".join(
+            [f"{t[2]} {t[3]} ({t[0]+1},{t[1]+1})" for t in player_threats]
+        )
+        st.error(
+            f"🚨 【本拠地防衛アラート】本拠地 ({p_info['home'][0]+1},{p_info['home'][1]+1}) 周辺に敵部隊が接近中！全4部隊を討伐へ向けてください：{threat_str}"
+        )
 
     user_corps = st.session_state.corps[p_nat]
     if "active_corp_idx" not in st.session_state:
@@ -1086,7 +1354,7 @@ elif st.session_state.phase == 4:
 
     top_map_col, top_corps_col = st.columns([1.35, 1.15])
     with top_map_col:
-        st.markdown("### 🗺️ 現在の戦略マップ（自軍・敵軍部隊位置）")
+        st.markdown("### 🗺️ 現在の戦略マップ（🏰＝本拠地）")
         st.markdown(
             render_map_html(highlight_pos=highlight_coord), unsafe_allow_html=True
         )
@@ -1098,11 +1366,24 @@ elif st.session_state.phase == 4:
         st.markdown("### 🛡️ 各部隊の作戦ウィンドウ（開閉式）")
         for idx, cp in enumerate(user_corps):
             cur_r, cur_c = cp["pos"]
+            cmd_info = p_info["commanders"][idx]
             inv_status = "侵攻済" if cp.get("invaded_this_turn") else "侵攻可"
             with st.expander(
-                f"{cp['id']}｜位置:({cur_r+1},{cur_c+1})｜{len(cp['units'])}/6機｜{inv_status}",
+                f"{cp['id']}（{cmd_info['name']}）｜位置:({cur_r+1},{cur_c+1})｜{inv_status}",
                 expanded=(idx == st.session_state.active_corp_idx),
             ):
+                # 部隊長画像を小さく表示＆戦力補正表示
+                c_img_col, c_desc_col = st.columns([1, 3.2])
+                with c_img_col:
+                    cmd_img_path, _ = resolve_commander_image(p_nat, idx + 1)
+                    if cmd_img_path:
+                        st.image(cmd_img_path, width=72)
+                    else:
+                        st.caption("👤 隊長")
+                with c_desc_col:
+                    st.markdown(f"**{cmd_info['name']}**（{cmd_info['role']}）")
+                    st.caption(f"✨ 戦力補正: {cmd_info['bonus_desc']}")
+
                 if st.button(
                     "📍 マップでこの部隊の位置をハイライト",
                     key=f"hl_{idx}",
@@ -1158,7 +1439,7 @@ elif st.session_state.phase == 4:
                             unoccupied_hostile_adj,
                             format_func=lambda p: (
                                 f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - "
-                                f"{(st.session_state.owner_grid[p[0]][p[1]] + '（無人領地）') if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
+                                f"{(st.session_state.owner_grid[p[0]][p[1]] + ('【本拠地🏰】' if NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else '（無人領地）')) if st.session_state.owner_grid[p[0]][p[1]] else '中立地域'}"
                             ),
                             key=f"neu_sel_{idx}",
                         )
@@ -1183,6 +1464,8 @@ elif st.session_state.phase == 4:
                                 0,
                                 f"🏳️ 【自国】{cp['id']} が ({nr+1},{nc+1})[{t_name}] の{target_desc}を戦闘なしで占領しました！",
                             )
+                            if prev_owner and NATIONS[prev_owner]["home"] == (nr, nc):
+                                handle_capital_fall(p_nat, prev_owner)
                             st.rerun()
 
                     if garrisoned_enemy_adj and cp["units"]:
@@ -1192,6 +1475,7 @@ elif st.session_state.phase == 4:
                             format_func=lambda p: (
                                 f"({p[0]+1},{p[1]+1}) [{st.session_state.terrain_grid[p[0]][p[1]]}] - "
                                 f"{st.session_state.owner_grid[p[0]][p[1]]}"
+                                f"{'【本拠地🏰】' if NATIONS[st.session_state.owner_grid[p[0]][p[1]]]['home'] == p else ''}"
                             ),
                             key=f"inv_sel_{idx}",
                         )
@@ -1207,17 +1491,24 @@ elif st.session_state.phase == 4:
                             terrain = st.session_state.terrain_grid[tr][tc]
 
                             atk_power = sum(
-                                calc_unit_effective_power(u, terrain, p_info["terrain"])
+                                calc_unit_effective_power(
+                                    u, terrain, p_info["terrain"], cmd_info
+                                )
                                 for u in cp["units"]
                             )
                             garrison_list = get_garrison_corps(tr, tc, defender)
-                            def_units = [
-                                u for _, g_cp in garrison_list for u in g_cp["units"]
-                            ]
-                            def_power = sum(
-                                calc_unit_effective_power(u, terrain, def_info["terrain"])
-                                for u in def_units
-                            )
+                            def_units = []
+                            def_power = 0
+                            for g_idx, g_cp in garrison_list:
+                                g_cmd = def_info["commanders"][g_idx]
+                                def_units.extend(g_cp["units"])
+                                def_power += sum(
+                                    calc_unit_effective_power(
+                                        u, terrain, def_info["terrain"], g_cmd
+                                    )
+                                    for u in g_cp["units"]
+                                )
+
                             won = atk_power >= def_power
                             cp["invaded_this_turn"] = True
                             st.session_state.active_corp_idx = idx
@@ -1267,11 +1558,14 @@ elif st.session_state.phase == 4:
                                 for g_idx, g_cp in garrison_list:
                                     reset_corp_to_initial(defender, g_cp, g_idx)
                                 res_msg = f"🏆 【自国】{cp['id']} が ({tr+1},{tc+1})[{terrain}] で {defender} 駐留部隊を撃破し占領（敵部隊は量産型6機へ再編成）！"
+                                st.session_state.logs.insert(0, res_msg)
+                                if def_info["home"] == (tr, tc):
+                                    handle_capital_fall(p_nat, defender)
                             else:
                                 reset_corp_to_initial(p_nat, cp, idx)
                                 res_msg = f"💥 【自国】{cp['id']} が ({tr+1},{tc+1}) の {defender} 防衛部隊に敗北し本拠地へ撤退（武装無しの量産型6機へ再編成）。"
+                                st.session_state.logs.insert(0, res_msg)
 
-                            st.session_state.logs.insert(0, res_msg)
                             st.session_state.battle_data = {
                                 "player_name": p_nat,
                                 "player_color": p_info["color"],
@@ -1286,7 +1580,7 @@ elif st.session_state.phase == 4:
                             }
                             st.rerun()
 
-    # 大きめサイズの戦闘画面（機体・武器種ごとの固有攻撃アニメーション）
+    # 戦闘アニメーション
     if st.session_state.battle_data:
         b_json = json.dumps(st.session_state.battle_data)
         st.markdown("### 💥 戦闘シミュレーション（機体特性・武器別攻撃エフェクト）")
@@ -1522,7 +1816,7 @@ elif st.session_state.phase == 5:
     with m_col:
         st.markdown(render_map_html(), unsafe_allow_html=True)
         st.caption(
-            "※ 左上(1〜4,1〜4): 荒れ地 / 右上(1〜4,5〜8): 科学都市 / 左下(5〜8,1〜4): 水上自然都市 / 右下(5〜8,5〜8): 月面都市 ｜ ★隊:自軍 / 🔥⚡🌿🌙隊:敵軍"
+            "※ 🏰: 各国本拠地 / ★隊:自軍 / 🔥⚡🌿🌙隊:敵軍"
         )
     with r_col:
         st.markdown("### 📜 今ターンの戦況ログ")
